@@ -31,8 +31,8 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    await tester.pumpWidget(const GitLoreApp());
-    await tester.tap(find.text('Try demo'));
+    await tester.pumpWidget(GitLoreApp(service: DemoArchitectureService()));
+    await tester.tap(find.text('Analyze repository'));
     await tester.pumpAndSettle();
     expect(find.text('expressjs/express'), findsOneWidget);
     await tester.ensureVisible(find.text('Next chapter →'));
@@ -63,11 +63,11 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    await tester.pumpWidget(const GitLoreApp());
+    await tester.pumpWidget(GitLoreApp(service: DemoArchitectureService()));
     expect(tester.takeException(), isNull);
     await tester.enterText(find.byType(TextField), 'not a URL');
-    await tester.ensureVisible(find.text('Try demo'));
-    await tester.tap(find.text('Try demo'));
+    await tester.ensureVisible(find.text('Analyze repository'));
+    await tester.tap(find.text('Analyze repository'));
     await tester.pumpAndSettle();
     expect(find.textContaining('Enter a repository URL'), findsOneWidget);
     expect(tester.takeException(), isNull);
@@ -75,7 +75,7 @@ void main() {
       find.byType(TextField),
       'https://github.com/owner/repo',
     );
-    await tester.tap(find.text('Try demo'));
+    await tester.tap(find.text('Analyze repository'));
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Next chapter →'));
     await tester.pumpAndSettle();

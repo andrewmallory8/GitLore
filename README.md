@@ -1,41 +1,43 @@
 # GitLore
 
-A Flutter starter for turning a repository into an interactive architecture story.
+A Flutter app that turns a public GitHub repository into a source-backed architecture inventory and guided code tour.
 
 ## Run
-
-With Flutter installed:
 
 ```sh
 flutter pub get
 flutter run -d chrome
 ```
 
-You can also run on a configured desktop or mobile target. No API keys or additional packages are needed for this demo.
+Paste a public `https://github.com/owner/repo` URL and select **Analyze repository**. No keys or backend setup are required. Flutter desktop and mobile targets are supported too; Android and macOS network permissions are included.
 
-## What works
+## Real repository analysis
 
-- Responsive repository input and URL validation.
-- Clearly labeled sample architecture for any accepted repository URL.
-- Clickable native Flutter diagram with component descriptions and illustrative file paths.
-- Four story chapters with synchronized node highlighting.
-- Save and reopen projects during the current session.
-- Loading and error states.
+The application calls GitHub's public REST API directly:
 
-**This starter does not fetch GitHub or call an LLM.** Submitted URLs label the demo fixture; its nodes and paths are examples, not claims about that repository. Saved projects reset when the application restarts.
+1. Fetch repository metadata and resolve the default branch to a commit SHA.
+2. Fetch the recursive Git tree from that commit.
+3. Rank README, dependency manifests, entry points, and selected source files.
+4. Fetch up to eight UTF-8 text files, each at most 40,000 bytes, with a combined 180,000-byte budget. Skip generated files, vendor folders, tests, examples, symlinks, and lockfiles. Tree responses are limited to 8 MB and individual blob responses to 70 KB.
+5. Extract declared technologies, display file roles with uncertainty labels, and resolve literal relative imports between sampled JS/TS/Dart files.
+6. Build a repository-specific chapter tour with source excerpts and clickable GitHub links pinned to the analyzed commit.
+
+This is **deterministic static analysis, not LLM analysis or a verified runtime request trace**. File roles are inferred from naming; dependency declarations do not prove runtime usage. Import extraction uses literal patterns rather than a complete language parser and may include references in comments or miss aliases, dynamic imports, and other languages. The inventory lists components in reading order, and only separately listed import references imply a discovered relationship. A database or HTTP request flow is never invented.
+
+Coverage and truncated-tree warnings are shown under **Analysis scope & limitations**. Empty repositories, inaccessible repositories, network failures, and GitHub rate limits produce readable errors. Unsupported repositories still show metadata and any supported files; the app does not execute repository code. Source excerpts show the first 24 lines; open a source link for the complete file.
+
+Public GitHub requests share an unauthenticated API quota. One analysis uses three inventory requests plus up to eight file requests. There is no persistent cache yet. See [GitHub rate limits](https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api) and [tree API documentation](https://docs.github.com/en/rest/git/trees). Never embed private GitHub or LLM credentials in a Flutter client; add a server endpoint for authenticated access or AI analysis.
 
 ## Team handoff
 
 | Owner | Starting files | Next milestone |
 | --- | --- | --- |
-| Diagram canvas | `lib/widgets/architecture_canvas.dart` | Add arbitrary edges, graph layout, zoom, and source links |
-| GitHub crawler | New server endpoint | Retrieve bounded README, tree, manifests, and entry points from public repos |
-| Prompt engine | `lib/models/architecture.dart`, `lib/services/architecture_service.dart` | Produce validated architecture data with file evidence |
-| Saved projects & UI | `lib/main.dart` | Add persistent storage, Explore, and cached analyses |
+| Diagram canvas | `lib/widgets/architecture_canvas.dart` | Render the extracted edges as a graph with zoom and pan |
+| GitHub crawler | `lib/services/github_architecture_service.dart` | Add server-side caching and better monorepo sampling |
+| Prompt engine | `lib/services/repository_analyzer.dart`, `lib/models/architecture.dart` | Add an optional server-hosted LLM that returns evidence and uncertainty |
+| Saved projects & UI | `lib/main.dart` | Add persistent storage, Explore, and analysis progress |
 
-Implement `ArchitectureService` with an HTTP-backed service and inject it through `GitLoreApp(service: ...)`. Keep GitHub credentials, provider keys, and model calls on the server. The current ordered list of nodes represents a linear example; add explicit edges to the model for real architecture graphs.
-
-A future server should validate GitHub URLs independently, cap fetch sizes and file counts, avoid generated/binary files, treat repository text as untrusted input, and cache by repository plus commit SHA. Include evidence and uncertainty in generated explanations. Do not infer missing components as facts.
+`ArchitectureService` is injectable through `GitLoreApp(service: ...)`. The app uses `GitHubArchitectureService` by default; `DemoArchitectureService` remains available for offline UI development. Saved projects last for the current session; re-saving replaces the old analysis with the current result.
 
 ## Verify
 
@@ -43,4 +45,7 @@ A future server should validate GitHub URLs independently, cap fetch sizes and f
 flutter analyze
 flutter test
 flutter build web
+dart run tool/analyze_repository.dart https://github.com/expressjs/express
 ```
+
+Unit tests use mocked GitHub responses and verify commit pinning, content-based results, literal import edges, bounded sampling, partial coverage, invalid URLs, and API failures. Widget tests cover source excerpts, chapters, saved projects, and narrow layouts. The CLI performs a real public GitHub smoke test without launching Flutter.

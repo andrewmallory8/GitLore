@@ -1,6 +1,6 @@
 import '../models/architecture.dart';
 
-/// Replace this implementation with your server API. Keep model keys server-side.
+/// Shared boundary for live GitHub analysis and offline demo fixtures.
 abstract class ArchitectureService {
   Future<Architecture> analyze(String url);
 }
@@ -12,12 +12,15 @@ class DemoArchitectureService implements ArchitectureService {
     if (uri == null ||
         uri.scheme != 'https' ||
         uri.host != 'github.com' ||
+        uri.userInfo.isNotEmpty ||
+        uri.hasPort ||
         uri.hasQuery ||
         uri.hasFragment ||
         parts == null ||
         parts.length != 2 ||
         !parts.every((part) => RegExp(r'^[a-zA-Z0-9_.-]+$').hasMatch(part)) ||
-        parts.any((part) => part == '.' || part == '..')) {
+        parts.any((part) => part == '.' || part == '..') ||
+        parts[1].replaceFirst(RegExp(r'\.git$'), '').isEmpty) {
       throw const FormatException(
         'Enter a repository URL like https://github.com/owner/repo',
       );
