@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+import 'services/github_architecture_service.dart';
 
 import 'models/architecture.dart';
 import 'services/architecture_service.dart';
@@ -34,7 +37,7 @@ class GitLoreApp extends StatelessWidget {
         border: InputBorder.none,
       ),
     ),
-    home: GitLoreHome(service: service ?? DemoArchitectureService()),
+    home: GitLoreHome(service: service ?? GitHubArchitectureService()),
   );
 }
 
@@ -67,6 +70,7 @@ class _GitLoreHomeState extends State<GitLoreHome> {
     setState(() {
       _loading = true;
       _error = null;
+      _architecture = null;
     });
     try {
       final result = await widget.service.analyze(_url.text);
@@ -78,6 +82,8 @@ class _GitLoreHomeState extends State<GitLoreHome> {
         _page = 0;
       });
     } on FormatException catch (error) {
+      if (mounted) setState(() => _error = error.message);
+    } on AnalysisException catch (error) {
       if (mounted) setState(() => _error = error.message);
     } catch (_) {
       if (mounted) {
@@ -91,9 +97,8 @@ class _GitLoreHomeState extends State<GitLoreHome> {
   void _save() {
     final architecture = _architecture!;
     setState(() {
-      if (!_saved.any((item) => item.repository == architecture.repository)) {
-        _saved.add(architecture);
-      }
+      _saved.removeWhere((item) => item.repository == architecture.repository);
+      _saved.add(architecture);
     });
     ScaffoldMessenger.of(context)
         .showSnackBar(const SnackBar(content: Text('Saved for this session.')));
@@ -164,7 +169,7 @@ class _GitLoreHomeState extends State<GitLoreHome> {
                       ),
                     const SizedBox(height: 12),
                     const Text(
-                      'STARTER DEMO  •  Sample architecture only · No API key required',
+                      'PUBLIC GITHUB REPOSITORIES  •  Static analysis · No API key required',
                       style: TextStyle(
                         fontSize: 11,
                         color: muted,
@@ -293,7 +298,7 @@ class _GitLoreHomeState extends State<GitLoreHome> {
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
               : const Icon(Icons.auto_awesome, size: 17),
-          label: Text(_loading ? 'Unfolding…' : 'Try demo'),
+          label: Text(_loading ? 'Unfolding…' : 'Analyze repository'),
         );
         return constraints.maxWidth < 580
             ? Column(
@@ -327,7 +332,7 @@ class _GitLoreHomeState extends State<GitLoreHome> {
         ),
         SizedBox(height: 10),
         Text(
-          'Try the demo to explore a clickable map and four short story chapters.',
+          'Analyze a public repository to explore its real files, dependencies, and code tour.',
           textAlign: TextAlign.center,
           style: TextStyle(color: muted, height: 1.6),
         ),
@@ -337,7 +342,7 @@ class _GitLoreHomeState extends State<GitLoreHome> {
           runSpacing: 12,
           children: [
             Text('01  Explore the architecture'),
-            Text('02  Follow the request'),
+            Text('02  Follow the code tour'),
             Text('03  Connect it to code'),
           ],
         ),
@@ -361,8 +366,11 @@ class _GitLoreHomeState extends State<GitLoreHome> {
               architecture.repository,
               style: const TextStyle(fontSize: 23, fontWeight: FontWeight.w700),
             ),
-            const Chip(
-              label: Text('DEMO FIXTURE', style: TextStyle(fontSize: 10)),
+            Chip(
+              label: Text(
+                architecture.isLive ? 'SOURCE-BACKED' : 'DEMO FIXTURE',
+                style: const TextStyle(fontSize: 10),
+              ),
               side: BorderSide.none,
             ),
             OutlinedButton.icon(
@@ -381,6 +389,46 @@ class _GitLoreHomeState extends State<GitLoreHome> {
           architecture.summary,
           style: const TextStyle(color: muted, height: 1.6),
         ),
+        if (architecture.isLive) ...[
+          const SizedBox(height: 12),
+          Text(
+            'COMMIT ${architecture.commitSha!.substring(0, 7)}  ·  ${architecture.branch}  ·  ${architecture.files.length}/${architecture.fileCount} files read',
+            style: const TextStyle(fontSize: 12, color: green),
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: architecture.technologies
+                .map((tech) => Chip(label: Text(tech)))
+                .toList(),
+          ),
+          ExpansionTile(
+            tilePadding: EdgeInsets.zero,
+            title: const Text(
+              'Analysis scope & limitations',
+              style: TextStyle(fontSize: 13),
+            ),
+            children: architecture.warnings
+                .map(
+                  (warning) => Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        warning,
+                        style: const TextStyle(
+                          color: muted,
+                          fontSize: 12,
+                          height: 1.6,
+                        ),
+                      ),
+                    ),
+                  ),
+                )
+                .toList(),
+          ),
+        ],
         const SizedBox(height: 24),
         LayoutBuilder(
           builder: (context, constraints) {
@@ -391,13 +439,14 @@ class _GitLoreHomeState extends State<GitLoreHome> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text(
-                    'Select a node to peek inside.',
+                    'Select a component. Reading order does not imply data flow.',
                     style: TextStyle(color: muted, fontSize: 12),
                   ),
                   const SizedBox(height: 18),
                   ArchitectureCanvas(
                     nodes: architecture.nodes,
                     selected: _selected,
+                    showDemoFlow: !architecture.isLive,
                     onSelect: (id) => setState(() => _selected = id),
                   ),
                   const Divider(height: 32),
@@ -425,20 +474,85 @@ class _GitLoreHomeState extends State<GitLoreHome> {
                   ),
                   const SizedBox(height: 14),
                   ...node.files.map(
-                    (file) => SelectableText(
-                      file,
-                      style: const TextStyle(
-                        fontFamily: 'monospace',
-                        fontSize: 12,
-                        color: green,
-                      ),
+                    (path) => Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (architecture.isLive)
+                          TextButton.icon(
+                            onPressed: () =>
+                                _openSource(architecture.sourceUrl(path)),
+                            icon: const Icon(Icons.open_in_new, size: 14),
+                            label: Text(
+                              path,
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                          )
+                        else
+                          SelectableText(path),
+                        ...architecture.files
+                            .where((file) => file.path == path)
+                            .map(
+                              (file) => Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: paper,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: SingleChildScrollView(
+                                  scrollDirection: Axis.horizontal,
+                                  child: SelectableText(
+                                    file.content
+                                        .split('\n')
+                                        .take(24)
+                                        .toList()
+                                        .asMap()
+                                        .entries
+                                        .map(
+                                          (entry) =>
+                                              '${entry.key + 1}  ${entry.value}',
+                                        )
+                                        .join('\n'),
+                                    style: const TextStyle(
+                                      fontFamily: 'monospace',
+                                      fontSize: 11,
+                                      height: 1.6,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                        const SizedBox(height: 8),
+                        Text(
+                          architecture.isLive
+                              ? 'Source excerpt · first 24 lines · pinned to analyzed commit'
+                              : 'Illustrative file paths · demo only',
+                          style: const TextStyle(fontSize: 10, color: muted),
+                        ),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Illustrative file paths · not fetched from GitHub',
-                    style: TextStyle(fontSize: 10, color: muted),
-                  ),
+                  if (architecture.isLive && architecture.edges.isNotEmpty) ...[
+                    const SizedBox(height: 18),
+                    const Text(
+                      'Observed relative imports',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    ...architecture.edges.map(
+                      (edge) => Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Text(
+                          '${edge.from} → ${edge.to}',
+                          style: const TextStyle(fontSize: 12, color: green),
+                        ),
+                      ),
+                    ),
+                  ],
+                  if (architecture.isLive && architecture.edges.isEmpty)
+                    const Text(
+                      'No relative imports resolved between the sampled files. Other connections may exist.',
+                      style: TextStyle(fontSize: 12, color: muted),
+                    ),
                 ],
               ),
             );
@@ -560,6 +674,23 @@ class _GitLoreHomeState extends State<GitLoreHome> {
     );
   }
 
+  Future<void> _openSource(Uri url) async {
+    try {
+      if (await launchUrl(url)) return;
+    } catch (_) {
+      /* Surface unavailable launchers without crashing. */
+    }
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: SelectableText(
+            'Could not open browser. Copy this link: $url',
+          ),
+        ),
+      );
+    }
+  }
+
   void _changeStep(int step) => setState(() {
     _step = step;
     _selected = _architecture!.steps[step].nodeId;
@@ -610,14 +741,18 @@ class _GitLoreHomeState extends State<GitLoreHome> {
         const SizedBox(height: 26),
         if (_saved.isEmpty)
           const Text(
-            'No stories saved yet. Try a demo, then save your project.',
+            'No stories saved yet. Analyze a repository, then save your project.',
           ),
         ..._saved.map(
           (item) => Card(
             child: ListTile(
               leading: const Icon(Icons.auto_stories_outlined, color: green),
               title: Text(item.repository),
-              subtitle: const Text('Demo architecture'),
+              subtitle: Text(
+                item.isLive
+                    ? 'Analyzed commit ${item.commitSha!.substring(0, 7)}'
+                    : 'Demo architecture',
+              ),
               trailing: const Icon(Icons.arrow_forward),
               onTap: () => setState(() {
                 _architecture = item;

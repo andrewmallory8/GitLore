@@ -10,7 +10,9 @@ class ArchitectureCanvas extends StatelessWidget {
     required this.nodes,
     required this.selected,
     required this.onSelect,
+    this.showDemoFlow = false,
   });
+  final bool showDemoFlow;
   final List<ArchitectureNode> nodes;
   final String selected;
   final ValueChanged<String> onSelect;
@@ -31,7 +33,13 @@ class ArchitectureCanvas extends StatelessWidget {
           children: [
             for (var index = 0; index < nodes.length; index++) ...[
               if (index > 0)
-                const Icon(Icons.south, color: Color(0xFFABB7A6), size: 22),
+                showDemoFlow
+                    ? const Icon(
+                        Icons.south,
+                        color: Color(0xFFABB7A6),
+                        size: 22,
+                      )
+                    : const SizedBox(height: 12),
               Semantics(
                 selected: nodes[index].id == selected,
                 child: OutlinedButton.icon(
@@ -51,12 +59,7 @@ class ArchitectureCanvas extends StatelessWidget {
                       borderRadius: BorderRadius.circular(8),
                     ),
                   ),
-                  icon: Icon(
-                    index == nodes.length - 1
-                        ? Icons.storage_outlined
-                        : Icons.code,
-                    size: 17,
-                  ),
+                  icon: Icon(Icons.code, size: 17),
                   label: Text(nodes[index].label),
                 ),
               ),
