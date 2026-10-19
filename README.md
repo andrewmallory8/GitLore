@@ -2,10 +2,14 @@
 
 A Flutter app that turns a public GitHub repository into a source-backed architecture inventory and guided code tour.
 
+New contributors and AI agents: start with [AGENTS.md](AGENTS.md) and the
+[project handover](docs/HANDOVER.md) for the product goal, architecture, setup,
+coding rules, current status, and prioritized next tasks.
+
 ## Run
 
 ```sh
-flutter pub get
+flutter pub get --enforce-lockfile
 flutter run -d chrome
 ```
 
@@ -26,7 +30,7 @@ This is **deterministic static analysis, not LLM analysis or a verified runtime 
 
 Coverage and truncated-tree warnings are shown under **Analysis scope & limitations**. Empty repositories, inaccessible repositories, network failures, and GitHub rate limits produce readable errors. Unsupported repositories still show metadata and any supported files; the app does not execute repository code. Source excerpts show the first 24 lines; open a source link for the complete file.
 
-Public GitHub requests share an unauthenticated API quota. One analysis uses three inventory requests plus up to eight file requests. There is no persistent cache yet. See [GitHub rate limits](https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api) and [tree API documentation](https://docs.github.com/en/rest/git/trees). Never embed private GitHub or LLM credentials in a Flutter client; add a server endpoint for authenticated access or AI analysis.
+Public GitHub requests share an unauthenticated API quota. One analysis uses three inventory requests plus up to eight file requests. The workspace reuses successful results for ten minutes in a session cache of up to ten repositories. **Refresh analysis** checks the displayed repository again immediately; overlapping requests share one fetch. Cache and saved projects reset on reload or restart. See [GitHub rate limits](https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api) and [tree API documentation](https://docs.github.com/en/rest/git/trees). Never embed private GitHub or LLM credentials in a Flutter client; add a server endpoint for authenticated access or AI analysis.
 
 ## Team handoff
 
@@ -41,11 +45,27 @@ Public GitHub requests share an unauthenticated API quota. One analysis uses thr
 
 ## Verify
 
+Use Flutter **3.47.2 stable** / Dart **3.13.2** to match CI. No environment variables
+or app secrets are needed. On Windows, native plugin setup may require Developer Mode.
+
 ```sh
-flutter analyze
-flutter test
-flutter build web
+dart format --output=none --set-exit-if-changed lib test tool
+flutter analyze --no-pub
+flutter test --no-pub --coverage
+flutter build web --release --no-pub
 dart run tool/analyze_repository.dart https://github.com/expressjs/express
 ```
 
 Unit tests use mocked GitHub responses and verify commit pinning, content-based results, literal import edges, bounded sampling, partial coverage, invalid URLs, and API failures. Widget tests cover source excerpts, chapters, saved projects, and narrow layouts. The CLI performs a real public GitHub smoke test without launching Flutter.
+
+## Automated builds
+
+[Flutter CI](.github/workflows/ci.yml) runs on every push and pull request, with
+manual runs available in GitHub Actions. It restores locked dependencies, checks
+formatting, analyzes code, runs unit/widget tests, and builds the release web app.
+Successful runs attach the web bundle and coverage report as downloadable artifacts
+for seven days. Tests use fixtures and require no GitHub or LLM keys. CI builds the
+web target; deployment and native release builds are future work.
+
+Before finishing a change, update [docs/HANDOVER.md](docs/HANDOVER.md) with completed
+work, decisions, validation, and the next steps. Use a feature branch and PR to `main`.

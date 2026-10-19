@@ -1,9 +1,73 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gitlore/main.dart';
+import 'package:gitlore/models/architecture.dart';
 import 'package:gitlore/services/architecture_service.dart';
 
+class _RecordingDemo extends DemoArchitectureService {
+  final calls = <String>[];
+
+  @override
+  Future<Architecture> analyze(String url) {
+    calls.add(url);
+    return super.analyze(url);
+  }
+}
+
 void main() {
+  testWidgets('reuses results and refreshes the displayed repository', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1440, 1300);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final service = _RecordingDemo();
+    await tester.pumpWidget(GitLoreApp(service: service));
+    for (var i = 0; i < 2; i++) {
+      await tester.ensureVisible(find.text('Analyze repository'));
+      await tester.tap(find.text('Analyze repository'));
+      await tester.pumpAndSettle();
+    }
+    expect(service.calls, ['https://github.com/expressjs/express']);
+
+    // Editing the input must not change which result the refresh button owns.
+    await tester.enterText(
+      find.byType(TextField),
+      'https://github.com/team/other',
+    );
+    await tester.ensureVisible(find.text('Refresh analysis'));
+    await tester.tap(find.text('Refresh analysis'));
+    await tester.pumpAndSettle();
+    expect(service.calls.last, 'https://github.com/expressjs/express');
+    expect(service.calls, hasLength(2));
+    await tester.tap(find.text('Save project'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.byType(TextField),
+      'https://github.com/team/other',
+    );
+    await tester.ensureVisible(find.text('Analyze repository'));
+    await tester.tap(find.text('Analyze repository'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Saved projects (1)'));
+    await tester.tap(find.text('Saved projects (1)'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('expressjs/express'));
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<TextField>(find.byType(TextField)).controller!.text,
+      'https://github.com/expressjs/express',
+    );
+    await tester.ensureVisible(find.text('Refresh analysis'));
+    await tester.tap(find.text('Refresh analysis'));
+    await tester.pumpAndSettle();
+    expect(service.calls.last, 'https://github.com/expressjs/express');
+    expect(service.calls, hasLength(4));
+    expect(tester.takeException(), isNull);
+  });
+
   test('repository URLs are validated before analysis', () {
     expect(
       DemoArchitectureService.repositoryFromUrl(

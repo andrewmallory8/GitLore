@@ -5,6 +5,7 @@ import 'services/github_architecture_service.dart';
 
 import 'models/architecture.dart';
 import 'services/architecture_service.dart';
+import 'services/cached_architecture_service.dart';
 import 'widgets/architecture_canvas.dart';
 
 void main() => runApp(const GitLoreApp());
@@ -49,6 +50,7 @@ class GitLoreHome extends StatefulWidget {
 }
 
 class _GitLoreHomeState extends State<GitLoreHome> {
+  late CachedArchitectureService _analyzer;
   final _url = TextEditingController(
     text: 'https://github.com/expressjs/express',
   );
@@ -61,22 +63,43 @@ class _GitLoreHomeState extends State<GitLoreHome> {
   String _selected = 'client';
 
   @override
+  void initState() {
+    super.initState();
+    _analyzer = CachedArchitectureService(widget.service);
+  }
+
+  @override
+  void didUpdateWidget(covariant GitLoreHome oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.service != widget.service) {
+      _analyzer = CachedArchitectureService(widget.service);
+    }
+  }
+
+  @override
   void dispose() {
     _url.dispose();
     super.dispose();
   }
 
-  Future<void> _analyze() async {
+  Future<void> _analyze({bool refresh = false}) async {
+    if (_loading) return;
+    final url = refresh && _architecture != null
+        ? 'https://github.com/${_architecture!.repository}'
+        : _url.text;
     setState(() {
       _loading = true;
       _error = null;
       _architecture = null;
     });
     try {
-      final result = await widget.service.analyze(_url.text);
+      final result = await (refresh
+          ? _analyzer.refresh(url)
+          : _analyzer.analyze(url));
       if (!mounted) return;
       setState(() {
         _architecture = result;
+        _url.text = 'https://github.com/${result.repository}';
         _step = 0;
         _selected = result.nodes.first.id;
         _page = 0;
@@ -175,6 +198,11 @@ class _GitLoreHomeState extends State<GitLoreHome> {
                         color: muted,
                         letterSpacing: .5,
                       ),
+                    ),
+                    const SizedBox(height: 6),
+                    const Text(
+                      'Results are reused for up to 10 minutes in this session. Use Refresh analysis to check for changes.',
+                      style: TextStyle(fontSize: 12, color: muted),
                     ),
                     const SizedBox(height: 42),
                     if (_architecture == null) _empty() else _result(),
@@ -381,6 +409,11 @@ class _GitLoreHomeState extends State<GitLoreHome> {
                     ? 'Saved'
                     : 'Save project',
               ),
+            ),
+            OutlinedButton.icon(
+              onPressed: _loading ? null : () => _analyze(refresh: true),
+              icon: const Icon(Icons.refresh, size: 17),
+              label: const Text('Refresh analysis'),
             ),
           ],
         ),
@@ -756,6 +789,7 @@ class _GitLoreHomeState extends State<GitLoreHome> {
               trailing: const Icon(Icons.arrow_forward),
               onTap: () => setState(() {
                 _architecture = item;
+                _url.text = 'https://github.com/${item.repository}';
                 _step = 0;
                 _selected = item.nodes.first.id;
                 _page = 0;
