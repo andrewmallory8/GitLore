@@ -111,6 +111,7 @@ void main() {
     await tester.tap(find.text('Analyze repository'));
     await tester.pumpAndSettle();
     expect(find.text('SOURCE-BACKED'), findsOneWidget);
+    expect(find.text('imports'), findsOneWidget);
     expect(find.textContaining('COMMIT 1234567'), findsOneWidget);
     await tester.ensureVisible(
       find.widgetWithText(OutlinedButton, 'README.md'),

@@ -446,7 +446,7 @@ class _GitLoreHomeState extends State<GitLoreHome> {
                   ArchitectureCanvas(
                     nodes: architecture.nodes,
                     selected: _selected,
-                    showDemoFlow: !architecture.isLive,
+                    edges: architecture.edges,
                     onSelect: (id) => setState(() => _selected = id),
                   ),
                   const Divider(height: 32),
