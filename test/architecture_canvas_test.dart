@@ -93,44 +93,65 @@ void main() {
     },
   );
 
-  testWidgets('graph scrolls horizontally and vertically on mobile', (
-    tester,
-  ) async {
-    tester.view.physicalSize = const Size(320, 700);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-    String? selected;
-    final manyNodes = List.generate(
-      9,
-      (i) => ArchitectureNode('$i', 'File $i', 'SOURCE', '', ['$i.js']),
-    );
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: ArchitectureCanvas(
-            nodes: manyNodes,
-            selected: '0',
-            onSelect: (id) => selected = id,
-            edges: List.generate(8, (i) => ArchitectureEdge('0', '${i + 1}')),
+  for (final screenWidth in [320.0, 1100.0]) {
+    testWidgets('graph fits, zooms, resets and selects at width $screenWidth', (
+      tester,
+    ) async {
+      tester.view.physicalSize = Size(screenWidth, 700);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      String? selected;
+      final manyNodes = List.generate(
+        9,
+        (i) => ArchitectureNode('$i', 'File $i', 'SOURCE', '', ['$i.js']),
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ArchitectureCanvas(
+              nodes: manyNodes,
+              selected: '0',
+              onSelect: (id) => selected = id,
+              edges: List.generate(8, (i) => ArchitectureEdge('0', '${i + 1}')),
+            ),
           ),
         ),
-      ),
-    );
-    await tester.ensureVisible(find.widgetWithText(OutlinedButton, 'File 8'));
-    await tester.tap(find.widgetWithText(OutlinedButton, 'File 8'));
-    expect(selected, '8');
-    final horizontal = find.byWidgetPredicate(
-      (widget) =>
-          widget is SingleChildScrollView &&
-          widget.scrollDirection == Axis.horizontal,
-    );
-    await tester.drag(horizontal, const Offset(-250, 0));
-    await tester.pumpAndSettle();
-    final horizontalScroll = tester.state<ScrollableState>(
-      find.descendant(of: horizontal, matching: find.byType(Scrollable)).first,
-    );
-    expect(horizontalScroll.position.pixels, greaterThan(0));
-    expect(tester.takeException(), isNull);
-  });
+      );
+      await tester.tap(find.text('Fit to view'));
+      await tester.pumpAndSettle();
+      final viewer = tester.widget<InteractiveViewer>(
+        find.byType(InteractiveViewer),
+      );
+      final controller = viewer.transformationController!;
+      final fitScale = controller.value.getMaxScaleOnAxis();
+      expect(fitScale, lessThan(1));
+      final viewport = tester.getRect(find.byType(InteractiveViewer));
+      for (var i = 0; i < 9; i++) {
+        final rect = tester.getRect(
+          find.widgetWithText(OutlinedButton, 'File $i'),
+        );
+        expect(viewport.contains(rect.topLeft), isTrue);
+        expect(viewport.contains(rect.bottomRight), isTrue);
+      }
+      await tester.tap(find.widgetWithText(OutlinedButton, 'File 8'));
+      expect(selected, '8');
+      await tester.tap(find.byTooltip('Zoom in'));
+      await tester.pump();
+      expect(controller.value.getMaxScaleOnAxis(), greaterThan(fitScale));
+      await tester.tap(find.byTooltip('Zoom out'));
+      await tester.pump();
+      expect(controller.value.getMaxScaleOnAxis(), closeTo(fitScale, .0001));
+      await tester.tap(find.text('Reset'));
+      await tester.pump();
+      expect(controller.value, Matrix4.identity());
+      await tester.drag(
+        find.byType(InteractiveViewer),
+        const Offset(-80, -100),
+      );
+      await tester.pumpAndSettle();
+      expect(controller.value.storage[13], lessThan(0));
+      expect(tester.takeException(), isNull);
+    });
+  }
 }
