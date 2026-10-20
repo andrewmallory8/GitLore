@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:path/path.dart' as p;
 
 import '../models/architecture.dart';
+import 'import_resolver.dart';
 
 /// Conservative, deterministic extraction. Repository code is never executed.
 class RepositoryAnalyzer {
@@ -166,33 +167,7 @@ class RepositoryAnalyzer {
         ArchitectureNode(file.path, name, role, explanation, [file.path]),
       );
     }
-    final edges = <ArchitectureEdge>[];
-    final paths = files.map((file) => file.path).toSet();
-    // Only literal relative imports among fetched files. No invented edges.
-    final imports = RegExp(
-      r'''(?:from\s+|import\s*(?:\(\s*)?|require\s*\(\s*)['"](\.[^'"]+)['"]''',
-    );
-    for (final file in files.where((file) => _source(file.path))) {
-      for (final match in imports.allMatches(file.content)) {
-        final target = p.posix.normalize(
-          p.posix.join(p.posix.dirname(file.path), match.group(1)!),
-        );
-        final candidates = [
-          target,
-          for (final ext in ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.dart'])
-            '$target$ext',
-          for (final ext in ['.ts', '.tsx', '.js', '.jsx']) '$target/index$ext',
-        ];
-        final resolved = candidates.where(paths.contains).firstOrNull;
-        if (resolved != null &&
-            resolved != file.path &&
-            !edges.any(
-              (edge) => edge.from == file.path && edge.to == resolved,
-            )) {
-          edges.add(ArchitectureEdge(file.path, resolved));
-        }
-      }
-    }
+    final edges = ImportResolver.resolve(files);
     return Architecture(
       repository: repository,
       summary:

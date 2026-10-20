@@ -262,3 +262,97 @@ and outcomes, reproducible bugs/blockers, and the next priority with acceptance
 criteria. Mark completed tasks and remove stale claims. Never record secrets.
 The next agent should inspect Git status/history, read this file, run the checks,
 and take the first unfinished priority appropriate to the user's request.
+
+
+## Sprint update — GL-01 and GL-02, 2026-10-19
+
+This append-only update preserves the complete prior handover above. Where the
+historical status says zoom/fit is absent or imports use raw regex, this update
+supersedes that status. Earlier validation results describe earlier commits, not
+this sprint.
+
+### Branch, scope, and user decisions
+
+- Development branch: `feat/sprint-gl-01-04`, based on `main` at `fb58105`.
+- User requested a local commit of GL-01 and GL-02 after reporting that the demo
+  worked well. No push, merge, deployment, or remote PR is authorized by this
+  commit request. Keep changes local until the user explicitly requests a push.
+- GL-03 (analysis server/response contract) and GL-04 (persistent bookshelf) remain
+  unimplemented. AI integration is explicitly deferred while the user discusses
+  provider and cost choices with teammates. Do not enable an AI provider or billing.
+- A pre-existing `pubspec.lock` change adjusts only the Flutter SDK constraint
+  from `>=3.44.0` to `3.47.2`, matching the existing pubspec pin. It is preserved
+  locally and excluded from the GL-01/GL-02 commit; no dependencies were added.
+
+### GL-01 — graph navigation
+
+- `lib/widgets/architecture_canvas.dart` now uses a stateful `InteractiveViewer`
+  with drag-to-pan, pinch zoom, Zoom in/out, Fit to view, and Reset controls.
+- Zoom is centered on the viewport; fit includes the entire scene, including
+  unconnected nodes and import lanes. Reset restores original scale/position.
+  Controls wrap on narrow screens. The vertical node layout is retained;
+  automatic layout is still future work.
+- Node selection, edge highlighting, source excerpts, and import direction remain
+  intact. New graph data resets the transform. Corrected a scale calculation
+  found during the live demo so zoom after fitting changes incrementally.
+- Updated canvas tests cover fit bounds, zoom/reset, pan, and selection at
+  320px and 1100px widths, alongside existing cycle/invalid-edge coverage.
+
+### GL-02 — import resolution
+
+- Added `lib/services/import_resolver.dart`; `RepositoryAnalyzer` delegates import
+  extraction/resolution to it. Repository code is never executed.
+- The lexical scanner skips line/block comments and ordinary quoted strings;
+  recognizes JS/TS static imports, re-exports, literal `require` calls, and
+  relative Dart import/export directives.
+- Resolves sampled exact paths first, then extensionless and directory-index
+  candidates (.ts, .tsx, .js, .jsx, .mjs, .cjs); supports .js-to-.ts/.tsx fallback.
+  Self edges, duplicates, and unresolved targets are omitted.
+- Added six fixture groups in `test/import_resolver_test.dart`, covering supported
+  declarations, comments/strings/templates/regex, unsupported references,
+  multiline/comment-separated syntax, Dart, and malformed/missing paths.
+- This is a lexical subset, not compiler-level resolution. Aliases, package
+  resolution, dynamic `import()`, computed require, escaped paths, template
+  interpolation, JSX text parsing, and scope/shadowing analysis are unsupported.
+  Regex recognition remains heuristic. Unsampled files cannot produce edges.
+- README now documents the controls, supported resolution rules, and limitations.
+
+### Validation and demo record
+
+Passed locally with Flutter 3.47.2 / Dart 3.13.2:
+
+- `flutter pub get --enforce-lockfile`
+- `dart format --output=none --set-exit-if-changed lib test tool` (14 files)
+- `flutter analyze --no-pub` (no issues)
+- `flutter build web --release --no-pub`
+- `git diff --check`
+- All six import fixture groups via a standalone Dart harness using the same
+  fixture bodies (temporary harness outside the repo; not a full test-suite run).
+
+Full automated validation remains outstanding: `flutter test --no-pub --coverage`
+could not complete because the native x64 engine crashed during CPU detection in
+the local sandbox. The Chrome test alternative also failed to launch its browser.
+These are not passing widget tests or coverage. Run the full suite in a working
+Flutter environment before claiming CI-equivalent validation or full mobile QA.
+
+Manual Chrome release demo at `http://127.0.0.1:8086`: Express analysis loaded six
+import edges; Fit showed all nine nodes and lanes, zoom/reset worked, and selecting
+utils.js opened its source excerpt. User reported that everything seemed to work
+well. The local server is session-dependent; serve a fresh `build/web` if needed.
+
+The emulator's separate internet problem was resolved with Android Studio's Cold
+Boot. Android reported validated Wi-Fi and successfully resolved/reached GitHub's
+API. A command-line DNS-override launch failed before boot with CPU detection;
+no override was needed after the Studio cold boot. Existing apps/data were kept.
+This networking check does not establish that the sprint APK was rebuilt/tested.
+
+### Next concrete work
+
+1. Complete full fixture/widget tests and coverage in a working environment;
+   validate pinch and source interaction on the current Android sprint build.
+2. On user direction, implement GL-03's versioned JSON request/response contract
+   and bounded server endpoint, reusing Dart crawler/analyzer logic. The proposed
+   optional Flutter server adapter should preserve direct keyless analysis.
+3. Keep AI integration deferred; GL-04 durable storage and automatic graph layout
+   remain pending. Inspect Git status before starting and preserve the local
+   lockfile adjustment. Do not push without explicit user authorization.
