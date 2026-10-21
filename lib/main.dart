@@ -370,7 +370,7 @@ class _GitLoreHomeState extends State<GitLoreHome> {
                       const Padding(
                         padding: EdgeInsets.only(bottom: 12),
                         child: Text(
-                          'Selected public source excerpts are sent through your server to Gemini. AI can make mistakes. The first request may take longer while a free server wakes.',
+                          'Selected public source excerpts are sent through your server to Gemini. AI can make mistakes. Generating an explanation may take a little longer.',
                           style: TextStyle(color: muted, fontSize: 12),
                         ),
                       ),

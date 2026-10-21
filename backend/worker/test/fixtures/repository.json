@@ -1,0 +1,25 @@
+{
+  "repository": "team/orchard",
+  "description": "A task API",
+  "language": "JavaScript",
+  "sha": "1234567890abcdef1234567890abcdef12345678",
+  "treeSha": "abcdef1234567890abcdef1234567890abcdef12",
+  "branch": "feature/main",
+  "files": [
+    { "path": "README.md", "content": "# Orchard\n\nA small task API." },
+    {
+      "path": "package.json",
+      "content": "{\"dependencies\":{\"express\":\"^5.0.0\",\"pg\":\"^8.0.0\"}}"
+    },
+    {
+      "path": "src/index.js",
+      "content": "const service = require('./service');\nservice.run();"
+    },
+    { "path": "src/service.js", "content": "exports.run = () => 'ok';" }
+  ],
+  "fileCount": 4,
+  "warnings": [
+    "Static code tour: roles are inferred from filenames and content. Import links are not proof of runtime data flow. No LLM is used.",
+    "Read 4 selected files out of 4 tree entries. Files over 40 KB, generated files, and lockfiles are excluded."
+  ]
+}

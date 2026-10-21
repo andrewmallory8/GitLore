@@ -104,6 +104,13 @@ packages:
     description: flutter
     source: sdk
     version: "0.0.0"
+  gitlore_core:
+    dependency: "direct main"
+    description:
+      path: "packages/gitlore_core"
+      relative: true
+    source: path
+    version: "0.1.0"
   http:
     dependency: "direct main"
     description:

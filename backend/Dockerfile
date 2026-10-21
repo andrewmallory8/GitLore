@@ -1,11 +1,10 @@
 FROM dart:3.13.2 AS build
 WORKDIR /app
 COPY backend/pubspec.* backend/
+COPY packages/gitlore_core packages/gitlore_core
 WORKDIR /app/backend
 RUN dart pub get --enforce-lockfile
 WORKDIR /app
-COPY lib/models lib/models
-COPY lib/services lib/services
 COPY backend/bin backend/bin
 COPY backend/lib backend/lib
 RUN dart --packages=backend/.dart_tool/package_config.json compile exe backend/bin/server.dart -o /app/server

@@ -1,6 +1,11 @@
 .git
 **/.env
 **/.env.*
+**/.dev.vars
+**/.dev.vars.*
+**/node_modules
+**/.wrangler
+backend/worker/dist
 **/.dart_tool
 build
 coverage

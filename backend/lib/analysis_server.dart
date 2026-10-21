@@ -4,10 +4,11 @@ import 'dart:io';
 
 import 'package:http/http.dart' as http;
 
-import '../../lib/models/architecture.dart';
-import '../../lib/services/architecture_service.dart';
-import '../../lib/services/architecture_codec.dart';
-import '../../lib/services/github_architecture_service.dart';
+import 'package:gitlore_core/models/architecture.dart';
+import 'package:gitlore_core/services/architecture_service.dart';
+import 'package:gitlore_core/services/architecture_codec.dart';
+import 'package:gitlore_core/services/github_architecture_service.dart';
+
 import 'gemini_narrator.dart';
 
 class AnalysisServer {
@@ -130,6 +131,7 @@ class AnalysisServer {
           e.message.isEmpty ? 'Invalid request.' : e.message,
         );
       } on TimeoutException {
+        request.response.persistentConnection = false;
         error(504, 'timeout', 'Analysis took too long. Try again.');
       } on AnalysisException catch (e) {
         error(502, 'github_error', e.message);
@@ -163,12 +165,39 @@ class AnalysisServer {
 
   Future<String> _body(HttpRequest request) async {
     final bytes = <int>[];
-    await for (final chunk in request) {
-      if (bytes.length + chunk.length > 4096) {
-        throw const FormatException('Request body exceeds 4096 bytes.');
-      }
-      bytes.addAll(chunk);
-    }
-    return utf8.decode(bytes);
+    final result = Completer<String>();
+    // Cancelling HttpRequest while reading can tear down the socket before the
+    // JSON error is sent. Close it only after the response has been flushed.
+    final subscription = request.listen(
+      (chunk) {
+        if (result.isCompleted) return;
+        if (bytes.length + chunk.length > 4096) {
+          request.response.persistentConnection = false;
+          result.completeError(
+            const FormatException('Request body exceeds 4096 bytes.'),
+          );
+          return;
+        }
+        bytes.addAll(chunk);
+      },
+      onError: (Object error, StackTrace stack) {
+        if (!result.isCompleted) result.completeError(error, stack);
+      },
+      onDone: () {
+        if (result.isCompleted) return;
+        try {
+          result.complete(utf8.decode(bytes));
+        } on FormatException catch (error) {
+          result.completeError(error);
+        }
+      },
+    );
+    unawaited(
+      request.response.done.then(
+        (_) => subscription.cancel(),
+        onError: (Object _) => subscription.cancel(),
+      ),
+    );
+    return result.future;
   }
 }

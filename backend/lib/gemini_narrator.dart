@@ -3,8 +3,8 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
-import '../../lib/models/architecture.dart';
-import '../../lib/services/architecture_codec.dart';
+import 'package:gitlore_core/models/architecture.dart';
+import 'package:gitlore_core/services/architecture_codec.dart';
 
 class GeminiNarrator {
   GeminiNarrator({

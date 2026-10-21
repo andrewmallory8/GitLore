@@ -30,18 +30,32 @@ This is **deterministic static analysis, not LLM analysis or a verified runtime 
 
 Coverage and truncated-tree warnings are shown under **Analysis scope & limitations**. Empty repositories, inaccessible repositories, network failures, and GitHub rate limits produce readable errors. Unsupported repositories still show metadata and any supported files; the app does not execute repository code. Source excerpts show the first 24 lines; open a source link for the complete file.
 
-Public GitHub requests share an unauthenticated API quota. One analysis uses three inventory requests plus up to eight file requests. The workspace reuses successful results for ten minutes in a session cache of up to ten repositories. **Refresh analysis** checks the displayed repository again immediately; overlapping requests share one fetch. Cache and saved projects reset on reload or restart. See [GitHub rate limits](https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api) and [tree API documentation](https://docs.github.com/en/rest/git/trees). Never embed private GitHub or LLM credentials in a Flutter client; add a server endpoint for authenticated access or AI analysis.
+Public GitHub requests share an unauthenticated API quota. One analysis uses three inventory requests plus up to eight file requests. The workspace reuses successful results for ten minutes in a session cache of up to ten repositories. **Refresh analysis** checks the displayed repository again immediately; overlapping requests share one fetch. Analysis cache resets on reload; saved projects persist locally through shared preferences. See [GitHub rate limits](https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api) and [tree API documentation](https://docs.github.com/en/rest/git/trees). Never embed private GitHub or LLM credentials in a Flutter client.
+
+## Optional AI server
+
+Cloudflare Workers is the selected host. The [Workers backend and runbook](backend/worker/README.md)
+provide a server-only Gemini key, team access code, bounded requests, checked
+citations, durable budgets/cache, retries and static fallback. Implementation is
+tested locally; hosted deployment remains pending. The [Dart prototype](backend/README.md)
+is still available for local experiments.
+
+Enable **AI explanation**, then use **Server settings** to enter the server URL
+and team code. Enter the Gemini key only in the server's secret store. The public
+URL may also be set with `--dart-define=GITLORE_API_URL=...`; never use a define
+for a privileged key. Turning AI off preserves direct keyless GitHub analysis.
+Provider failures show a static fallback and retry action.
 
 ## Team handoff
 
 | Owner | Starting files | Next milestone |
 | --- | --- | --- |
 | Diagram canvas | `lib/widgets/architecture_canvas.dart` | Add automatic graph layout; validate the new zoom/fit controls across devices |
-| GitHub crawler | `lib/services/github_architecture_service.dart` | Add server-side caching and better monorepo sampling |
-| Prompt engine | `lib/services/repository_analyzer.dart`, `lib/models/architecture.dart` | Add an optional server-hosted LLM that returns evidence and uncertainty |
-| Saved projects & UI | `lib/main.dart` | Add persistent storage, Explore, and analysis progress |
+| GitHub crawler | `packages/gitlore_core/lib/services/`, `backend/worker/src/services/github.ts` | Hosted verification and better monorepo sampling |
+| Prompt engine | `backend/worker/src/services/gemini.ts`, `backend/contracts/` | Hosted Gemini acceptance and better evidence-backed explanations |
+| Saved projects & UI | `lib/main.dart`, shared `bookshelf_service.dart` | Restart/mobile acceptance, Explore and progress |
 
-`ArchitectureService` is injectable through `GitLoreApp(service: ...)`. The app uses `GitHubArchitectureService` by default; `DemoArchitectureService` remains available for offline UI development. Saved projects last for the current session; re-saving replaces the old analysis with the current result.
+`ArchitectureService` is injectable through `GitLoreApp(service: ...)`. The app uses `GitHubArchitectureService` by default; `DemoArchitectureService` remains available for offline UI development. Re-saving replaces the local snapshot. Shared models/services live in `packages/gitlore_core/lib/`; matching files in `lib/` are compatibility exports.
 
 ## Verify
 
@@ -49,23 +63,33 @@ Use Flutter **3.47.2 stable** / Dart **3.13.2** to match CI. No environment vari
 or app secrets are needed. On Windows, native plugin setup may require Developer Mode.
 
 ```sh
-dart format --output=none --set-exit-if-changed lib test tool
+flutter pub get --enforce-lockfile
+cd backend
+dart pub get --enforce-lockfile
+cd ..
+dart format --output=none --set-exit-if-changed lib test tool packages/gitlore_core/lib backend/bin backend/lib backend/test
 flutter analyze --no-pub
 flutter test --no-pub --coverage
+dart --packages=.dart_tool/package_config.json tool/generate_worker_fixture.dart --check
 flutter build web --release --no-pub
-dart run tool/analyze_repository.dart https://github.com/expressjs/express
+cd backend
+dart analyze --fatal-infos
+dart test
 ```
 
-Unit tests use mocked GitHub responses and verify commit pinning, content-based results, literal import edges, bounded sampling, partial coverage, invalid URLs, and API failures. Widget tests cover source excerpts, chapters, saved projects, and narrow layouts. The CLI performs a real public GitHub smoke test without launching Flutter.
+Unit tests use mocked GitHub responses and verify commit pinning, content-based results, literal import edges, bounded sampling, partial coverage, invalid URLs, and API failures. Widget tests cover source excerpts, chapters, saved projects, and narrow layouts. Run the separate [Worker checks](backend/worker/README.md#verification) too. The optional root command `dart run tool/analyze_repository.dart https://github.com/expressjs/express` performs a real public GitHub smoke test without launching Flutter.
 
 ## Automated builds
 
-[Flutter CI](.github/workflows/ci.yml) runs on every push and pull request, with
+[GitLore CI](.github/workflows/ci.yml) runs on every push and pull request, with
 manual runs available in GitHub Actions. It restores locked dependencies, checks
 formatting, analyzes code, runs unit/widget tests, and builds the release web app.
 Successful runs attach the web bundle and coverage report as downloadable artifacts
 for seven days. Tests use fixtures and require no GitHub or LLM keys. CI builds the
-web target; deployment and native release builds are future work.
+web target. A separate Node.js job verifies Worker formatting/types, fixtures,
+actual Workers runtime behavior and a Wrangler dry-run bundle artifact. Dart
+backend tests and a shared contract fixture check also run. Deployment and native
+release builds remain future work.
 
 Before finishing a change, update [docs/HANDOVER.md](docs/HANDOVER.md) with completed
 work, decisions, validation, and the next steps. Use a feature branch and PR to `main`.
@@ -76,5 +100,7 @@ With AI explanation enabled, unsuccessful AI generation displays an explicit
 fallback card above the static result. It includes a safe reason (such as Gemini
 HTTP 503, quota, configuration, connection, or timeout) and Retry AI analysis.
 Retry refreshes the analysis rather than reusing the client cache. Provider secrets
-and raw error responses are not shown. The local demo API runs on port 8087;
-server-only settings belong in ignored `backend/.env`. Restart it after changes.
+and raw error responses are not shown. Both local backend options use port 8087;
+run one at a time. Workers reads ignored `backend/worker/.dev.vars`; the Dart
+prototype reads ignored `backend/.env`. Hosted Workers uses Cloudflare secrets.
+Restart local servers after changing configuration.

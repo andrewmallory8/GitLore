@@ -1,0 +1,9 @@
+name: gitlore_core
+description: Shared pure Dart contracts, repository analysis, and storage boundaries.
+version: 0.1.0
+publish_to: none
+environment:
+  sdk: ^3.13.2
+dependencies:
+  http: ^1.6.0
+  path: ^1.9.1

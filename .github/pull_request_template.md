@@ -5,6 +5,7 @@ Describe the problem and the resulting behavior.
 ## Validation
 
 - [ ] Formatting, `flutter analyze`, `flutter test`, and `flutter build web` pass.
+- [ ] Dart backend checks, shared fixture parity, and Worker checks/tests/dry-run build pass when affected.
 - [ ] Relevant behavior and error cases were checked.
 - [ ] `docs/HANDOVER.md` reflects current status, decisions, checks, and next tasks.
 - [ ] README/setup instructions were updated if behavior or configuration changed.

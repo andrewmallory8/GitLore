@@ -1,0 +1,18 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "gitlore-api",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-21",
+  "workers_dev": true,
+  "vars": {
+    "GEMINI_MODEL": "gemini-3.8-flash",
+    "ALLOWED_ORIGINS": "http://localhost:8086,http://127.0.0.1:8086",
+  },
+  "durable_objects": {
+    "bindings": [{ "name": "ANALYSES", "class_name": "AnalysisCoordinator" }],
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["AnalysisCoordinator"] },
+  ],
+  "observability": { "enabled": false },
+}

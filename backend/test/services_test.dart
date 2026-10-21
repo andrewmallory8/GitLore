@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -5,10 +6,11 @@ import 'package:test/test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
-import '../../lib/models/architecture.dart';
-import '../../lib/services/architecture_codec.dart';
-import '../../lib/services/bookshelf_service.dart';
-import '../../lib/services/server_architecture_service.dart';
+import 'package:gitlore_core/models/architecture.dart';
+import 'package:gitlore_core/services/architecture_codec.dart';
+import 'package:gitlore_core/services/bookshelf_service.dart';
+import 'package:gitlore_core/services/server_architecture_service.dart';
+
 import '../lib/gemini_narrator.dart';
 import '../lib/analysis_server.dart';
 
@@ -255,7 +257,7 @@ void main() {
       headers: {
         'content-type': 'application/json',
         'authorization': 'Bearer $token',
-        if (origin != null) 'origin': origin,
+        'origin': ?origin,
       },
       body: jsonEncode(body),
     );
@@ -312,5 +314,16 @@ void main() {
         expect(calls, 0);
       },
     );
+    test('oversized chunked requests retain the JSON error response', () async {
+      final request = http.StreamedRequest('POST', endpoint)
+        ..headers['content-type'] = 'application/json'
+        ..headers['authorization'] = 'Bearer team-code';
+      request.sink.add(utf8.encode(jsonEncode({'url': 'x' * 5000})));
+      unawaited(request.sink.close());
+      final response = await client.send(request);
+      expect(response.statusCode, 400);
+      expect(await response.stream.bytesToString(), contains('4096 bytes'));
+      expect(calls, 0);
+    });
   });
 }

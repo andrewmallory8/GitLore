@@ -1,7 +1,10 @@
 # GitLore handover
 
-Last updated: 2026-10-19 (America/Chicago).
-Starting point for this development pass: `main` at `7dc50aa` (merged import-arrow feature).
+Last updated: 2026-10-21 (America/Chicago).
+Current pass: `codex/cloudflare-worker`, based on `feat/sprint-gl-01-04` at `13e00c3`.
+See **Cloudflare implementation handoff — 2026-10-21** at the end for current
+decisions, verification, limitations and the next task. Dated entries preserve
+history; the newest entry supersedes older status/hosting decisions.
 Read this file together with root [`AGENTS.md`](../AGENTS.md) and the latest Git history.
 This is a living project status document; update it in every implementation PR.
 
@@ -20,18 +23,21 @@ Do not enable billable services or silently introduce a paid dependency.
 
 ## Read this status first
 
-**Implemented:** a Flutter app that fetches public repositories, samples bounded
-source files, extracts declared technologies and literal imports, and displays a
-source-backed code tour. The map is a custom Flutter canvas, not Mermaid/React Flow.
-The current result is deterministic static analysis, not an LLM explanation or a
-verified runtime trace. Do not describe the complete product vision as finished.
+**Implemented:** Flutter public-repository analysis, bounded source sampling,
+lexical import edges, navigable canvas with pan/zoom/fit/reset, chapters and source
+links; session analysis cache/refresh; on-device saved projects; schema v1 and an
+optional server adapter; Dart/Gemini local prototype. One earlier local Gemini
+success was reported, alongside frequent 503 fallbacks.
 
-**This pass adds:** a bounded session cache, explicit refresh, automated web build
-and checks, contributor instructions, this handover, and a PR checklist.
+**This pass adds:** Cloudflare Workers backend, SQLite Durable Object cache and
+team budgets, bounded Gemini retries/evidence validation, a shared Dart package
+that fixes backend import analysis, deterministic cross-language/runtime fixtures,
+and expanded CI. The Workers implementation is locally verified, not deployed.
 
-**Still absent:** server/API layer, LLM integration, automatic graph layout/zoom,
-Mermaid export, persistent saved projects, Explore, deployment, and authentication.
-Desktop/mobile project scaffolds exist; the automated target is web only.
+**Still pending:** hosted provisioning/secrets/live acceptance; individual user
+accounts/public abuse controls; automatic layout, Mermaid export, Explore, shared
+history and broader mobile/restart acceptance. Static import edges are not runtime
+traces, and AI explanations remain clearly labeled interpretations.
 
 ## Setup and commands
 
@@ -43,6 +49,9 @@ to accommodate an older local SDK. No environment variables or API keys are curr
 ```sh
 flutter --version
 flutter pub get --enforce-lockfile
+cd backend
+dart pub get --enforce-lockfile
+cd ..
 flutter run -d chrome
 ```
 
@@ -52,13 +61,25 @@ Offline UI development: inject `DemoArchitectureService` through
 Verification, matching CI:
 
 ```sh
-dart format --output=none --set-exit-if-changed lib test tool
+dart format --output=none --set-exit-if-changed lib test tool packages/gitlore_core/lib backend/bin backend/lib backend/test
 flutter analyze --no-pub
 flutter test --no-pub --coverage
+dart --packages=.dart_tool/package_config.json tool/generate_worker_fixture.dart --check
 flutter build web --release --no-pub
+cd backend
+dart analyze --fatal-infos
+dart test
+cd worker
+npm ci
+npm run format:check
+npm run check
+npm test
+npm run test:runtime
+npm run build
 ```
 
-Format edits with `dart format lib test tool` before the check. The optional live
+`npm run build` only bundles the Worker; it does not deploy. Format Dart edits
+with the same directories above and use `npm run format` for the Worker. The optional live
 smoke test is `dart run tool/analyze_repository.dart https://github.com/expressjs/express`.
 It consumes public GitHub requests and intentionally stays outside CI.
 
@@ -71,12 +92,13 @@ with those restored packages. Do not report a failed restore as a successful che
 
 | Location | Responsibility |
 | --- | --- |
-| `lib/main.dart` | App theme, URL form, loading/errors, workspace, chapters, source excerpts/links, session bookshelf |
-| `lib/models/architecture.dart` | Shared result, nodes, directed edges, chapters, sampled files, commit-pinned source URLs |
-| `lib/services/architecture_service.dart` | Injectable `analyze(String url)` boundary, URL validation, offline demo |
-| `lib/services/github_architecture_service.dart` | Public REST requests, commit pinning, sampling limits, API error translation |
-| `lib/services/repository_analyzer.dart` | File ranking, technology extraction, inferred roles, literal relative imports, static chapters |
-| `lib/services/cached_architecture_service.dart` | Service decorator: ten-minute TTL, ten-entry LRU, shared in-flight requests, refresh |
+| `lib/main.dart` | App theme, URL form, loading/errors, workspace, chapters, sources, AI/server settings and local bookshelf |
+| `packages/gitlore_core/lib/models/` | Shared pure Dart result, evidence, nodes, chapters and source URLs |
+| `packages/gitlore_core/lib/services/` | Injectable analysis boundary, crawler/analyzer/imports, codec, session cache, persistent shelf and server adapter |
+| `lib/models/`, `lib/services/` | Compatibility exports for the shared package, except Flutter-specific adapters |
+| `backend/worker/src/` | Cloudflare API, durable coordinator/budgets/cache, TypeScript crawler/static analyzer/Gemini |
+| `backend/contracts/` | Schema v1 shared by Flutter and both backends |
+| `backend/lib/` | Optional Dart local prototype; imports shared package |
 | `lib/widgets/architecture_canvas.dart` | Clickable nodes, directed import arrows, selection highlighting, scrolling |
 | `test/` | Mocked crawler/unit tests and Flutter widget tests |
 | `tool/analyze_repository.dart` | Optional real-GitHub CLI smoke test |
@@ -88,7 +110,7 @@ Current flow:
 ```text
 URL form -> session cache -> GitHub crawler -> RepositoryAnalyzer -> Architecture
                                                                -> map / chapters / sources
-                                                               -> session bookshelf
+                                                               -> persistent on-device bookshelf
 ```
 
 The cache lives with the workspace state and wraps the injected analysis service.
@@ -98,7 +120,10 @@ cache hits do not extend that lifetime. Least recently used entries are evicted
 above ten. Concurrent calls for one repository share a request. Refresh bypasses
 completed cache entries; failures are not cached and a failed refresh discards the
 old cache entry. Saved projects remain separate snapshots until explicitly saved again.
-Neither cache nor bookshelf survives reload/restart. The CLI uses the raw crawler.
+The client cache resets on reload; saved snapshots persist through a versioned
+shared-preferences storage adapter. AI mode routes through the optional server
+adapter. Worker cache/budgets are durable; see the latest appendix. The CLI uses
+the raw crawler.
 
 ## Contracts to preserve
 
@@ -123,27 +148,27 @@ Neither cache nor bookshelf survives reload/restart. The CLI uses the raw crawle
   blob JSON at 70 KB, requests/stream inactivity at 20 seconds. Symlinks, binary,
   generated/vendor/test/example files, and lockfiles are skipped by current rules.
 
-No backend, database schema, or LLM JSON contract exists yet. Before connecting
-those components, commit versioned request/response examples and schema validation.
-Future AI responses should include node/edge/step evidence (path + commit + line
-references), uncertainty, analysis version, and warnings. Validate every reference
-against fetched source. Reject malformed output and retain a static fallback.
+Schema v1 exists in `backend/contracts/analysis-v1.schema.json`. Shared Dart codec
+and Worker validators enforce references and bounds. AI chapters cite path/line
+ranges in sampled files on the analyzed commit; the graph remains static imports.
+Validate output, preserve uncertainty and retain static fallback. No Supabase
+schema or shared user database exists yet.
 
 ## Planned architecture and four-person ownership
 
-Keep Flutter as the shared UI. Add a separately organized server (proposed
-`backend/`, with its own README/tests) when privileged API access or an LLM is added.
-The intended server flow is URL validation -> bounded GitHub snapshot -> analysis
+Keep Flutter as the shared UI. `backend/worker/` is the selected hosted server,
+with its own README/tests; `backend/lib/` retains the local Dart prototype.
+The server flow is URL validation -> bounded GitHub snapshot -> analysis
 cache -> optional LLM with validated evidence -> versioned result -> Flutter UI.
 Supabase may persist normalized summaries and curated public analyses behind
 documented access rules; implement and test row-level security before shared writes.
 
 | Workstream | Existing starting point | Next responsibility |
 | --- | --- | --- |
-| Dev 1: diagram canvas | `lib/widgets/architecture_canvas.dart` | Graph layout, zoom/fit controls, responsive interactions; possible Mermaid export |
-| Dev 2: GitHub crawler | `lib/services/github_architecture_service.dart` | Monorepo coverage, server endpoint, shared commit-based cache and quota handling |
-| Dev 3: prompt engine | `repository_analyzer.dart`, shared models | Server-hosted Gemini/Groq adapter, versioned schema, evidence validation, static fallback |
-| Dev 4: saved projects/UI | `lib/main.dart`, cache decorator | Extract screens, durable bookshelf, progress states, Explore, optional Supabase |
+| Dev 1: diagram canvas | `lib/widgets/architecture_canvas.dart` | Automatic layout, mobile acceptance and possible export |
+| Dev 2: GitHub crawler | Shared Dart services, `backend/worker/src/services/` | Hosted acceptance, monorepo sampling and API capacity |
+| Dev 3: prompt engine | Worker Gemini adapter, shared schema/models | Hosted provider verification and richer evidence-backed explanations |
+| Dev 4: saved projects/UI | `lib/main.dart`, bookshelf service | Restart/mobile acceptance, screen extraction, progress and Explore |
 
 Coordinate model/API changes across workstreams before implementation. These are
 responsibilities, not claims that people or hosted services have already been assigned.
@@ -154,7 +179,7 @@ responsibilities, not claims that people or hosted services have already been as
 | --- | --- |
 | Continue Flutter instead of the original React/Next.js sketch | The inherited app and tests already work in Flutter; preserve that investment and keep services independent of the UI. |
 | Keep static analysis as the default | It works without credentials and exposes concrete source evidence. AI generation can be an optional server-backed enhancement. |
-| Use a small session cache first | Repeated analyses consume fewer public API calls without adding an account, package, or server dependency. Durable/shared caching remains separate work. |
+| Use small bounded caches | Direct mode keeps its session cache; Worker mode additionally caches commit-keyed snapshots durably without introducing user accounts. |
 | Build web in CI first | Web is the initial shared delivery target and needs no mobile signing credentials. Existing native scaffolds do not imply verified release support. |
 | Defer LLM and Supabase credentials to a server | Client bundles cannot protect privileged secrets. Define contracts and access rules before adding hosted integrations. |
 
@@ -167,7 +192,8 @@ As UI work expands, move screens into `lib/screens/` and reusable panels into
 `lib/widgets/` rather than continuing to grow `main.dart`. Preserve dependency injection;
 add packages only for a concrete need, and explain intentional dependency changes.
 
-Start from updated `main`, use `feat/<topic>`, `fix/<topic>`, or `docs/<topic>`, and
+Start from updated `main` or the user's requested feature baseline. Codex-created
+branches use `codex/<topic>`; other contributors may use `feat/`, `fix/` or `docs/`. Then
 write focused commits such as `feat: cache repository analyses for the session`.
 Open a PR to `main` with behavior, validation, and remaining limitations. Update
 this handover in the same PR. Preserve unrelated local changes and avoid force pushes.
@@ -182,13 +208,16 @@ Supabase service-role keys are server-only; any client publishable key requires 
 
 ## Automated builds
 
-`Flutter CI` runs on pushes, pull requests, and manual dispatch. It uses Linux,
+`GitLore CI` runs on pushes, pull requests, and manual dispatch. It uses Linux,
 read-only repository permissions, a pinned Flutter version, locked dependencies,
 and cancellation of superseded runs. Formatting, static analysis, all fixture tests,
 and a release web build must pass. Successful runs upload `gitlore-web-<commit>`
 and `gitlore-coverage-<commit>` artifacts for seven days. Artifacts are downloadable
 from the run's Actions page; serve the extracted web bundle over HTTP to inspect it.
-This builds the app; it does not deploy hosting or create signed mobile releases.
+The separate Worker job uses Node 24, locked npm restore, formatting/types, fixture
+and workerd runtime tests, then a dry-run bundle uploaded as `gitlore-worker-<commit>`.
+Dart backend analysis/tests and cross-language fixture freshness are also checked.
+This builds the app/server; it does not deploy or create signed mobile releases.
 
 CI requires no app secrets and makes no live repository/LLM analysis requests.
 GitHub must allow Actions and the referenced actions for runs to start. Workflow
@@ -208,7 +237,10 @@ See [flutter-action configuration](https://github.com/subosito/flutter-action) a
 - [x] Refresh and bookshelf opening synchronize the URL with the displayed repository.
 - [x] Automated web build/check workflow, PR checklist, README links, agent/handover docs.
 
-## Ordered backlog with completion criteria
+## Historical initial backlog (2026-10-19)
+
+Preserved for context. Several items below were implemented in later sprints;
+use the latest appendix's ordered tasks for current work.
 
 1. **Durable saved projects (Dev 4).** Extract a storage service with a versioned
    serialization contract. Save/open/delete analyses across app restarts; handle
@@ -232,7 +264,9 @@ See [flutter-action configuration](https://github.com/subosito/flutter-action) a
    Flutter map; escape untrusted labels and preserve edge meaning. Configure hosting
    only after review. Add native build/signing checks when those targets become required.
 
-## Known limitations and validation record
+## Historical initial limitations and validation record (2026-10-19)
+
+The following describes the initial pass, not the current implementation.
 
 - No parser-level import resolution: comments may produce false matches; aliases,
   dynamic imports, many languages, and unsampled files can be missed.
@@ -449,3 +483,136 @@ Existing 13 backend tests and release web build passed; lib/test/tool analysis
 passed. Whole-project backend import analysis and Flutter engine test issues
 recorded above remain limitations, not passing CI. Full CI/native acceptance is
 required before merging. All historical handover entries above are retained.
+
+## Cloudflare implementation handoff — 2026-10-21
+
+### Scope and branch
+
+- The team selected **Cloudflare Workers**. This supersedes earlier undecided-host
+  entries. User authorized a new branch from the latest sprint and implementation.
+- Branch: `codex/cloudflare-worker`, based on fetched
+  `origin/feat/sprint-gl-01-04` at `13e00c3`. No merge/deployment performed.
+  Work is local; this pass has not pushed or opened a remote PR.
+- Preserved pre-existing main-branch Flutter-generated edits in the stash named
+  `Preserve local Flutter-generated changes before Cloudflare branch`. Leave it
+  intact; do not apply it to this branch or drop it without reviewing its owner/context.
+
+### What changed and why
+
+1. Added `backend/worker/` TypeScript implementation. Dart's HTTP server cannot
+   run unchanged in Workers. Flutter keeps its existing schema v1 server adapter,
+   server settings and keyless direct mode; no frontend rewrite was needed.
+2. The Worker checks team authentication, browser origins, schema/root URL and
+   4 KB/ten-second body limits before forwarding to a single SQLite Durable Object.
+   SQLite is supported on Workers Free. Analysis runs there to keep parsing out
+   of the lightweight Free Worker CPU budget; hosted CPU fit is still unverified.
+3. `AnalysisCoordinator` persistently coordinates 100 accepted requests/day,
+   10/minute, two concurrent distinct jobs, 20 Gemini attempts/day (including
+   retries), and a 15-second cooldown between new AI jobs. UTC resets are explicit.
+   Identical in-flight calls share work. These are conservative team limits, not
+   provider quota guarantees or individual-user authentication.
+4. Ported the bounded GitHub crawler, static analyzer and lexical import subset.
+   Fetch only public GitHub API endpoints; resolve immutable commits; never execute
+   source. Preserve eight-file/40 KB/180 KB budgets and enforce actual blob bytes
+   even when tree sizes are understated. Network deadlines abort real transports.
+5. Added ten-entry, ten-minute durable LRU cache keyed by canonical repository,
+   commit, analyzer, AI flag, model and prompt. Always re-resolve the current commit
+   before a cache lookup. Cache successful static/AI results, not AI failure fallbacks.
+6. Gemini uses server-only header credentials, bounded excerpts and output,
+   one transient HTTP retry at most, durable reservation per attempt, and checked
+   evidence/node ownership. No retry on 429/auth failures. Invalid/failed output
+   keeps static chapters and safe warnings; import edges never become AI runtime flow.
+7. Extracted existing shared Dart implementations unchanged into
+   `packages/gitlore_core/lib/models/` and `services/`. Original `lib/` entry points
+   re-export them, preserving injection and existing callers. Both Dart packages
+   now use a local path dependency, fixing the previously recorded cross-package
+   analyzer errors. Updated both lockfiles and Docker copy paths; no unrelated
+   dependency upgrades. New Worker tooling has its own npm lockfile.
+8. Fixed a reproducible Dart prototype bug: early cancellation while rejecting an
+   oversized body closed the socket before delivering its JSON error. Delay
+   cancellation until response completion; cover fixed-length and chunked requests.
+9. Expanded CI with standalone backend analysis/tests, Dart/Worker fixture parity,
+   and a Node 24 job for Worker formatting/types, fixtures, actual Workers runtime
+   tests and a dry-run bundle artifact. Builds need no provider credentials and
+   do not deploy. Updated contributor/PR instructions and README; removed obsolete
+   UI copy claiming that the selected server wakes from an idle sleep.
+10. Added ignored local `.dev.vars` patterns and Docker-context exclusions for
+    local Worker secrets/dependencies/state. No real key was read, copied or
+    configured for this pass. Hosted secrets must use Cloudflare's secret store.
+
+### Structure and setup
+
+Read [`backend/worker/README.md`](../backend/worker/README.md) for the complete
+request contract, settings, limits, local workflow, authorized deployment runbook,
+secret rotation and limitations. `src/index.ts` is the public boundary;
+`coordinator.ts` owns orchestration; `limits.ts` durable quotas/cache; `services/`
+owns crawler/static imports/Gemini; `contracts.ts` validates results and citations.
+
+Local: `npm ci`, copy the safe `.dev.vars.example` without overwriting another
+developer's file, enter a random team code of at least 32 characters and optional
+Gemini key locally, then `npm run dev`. Port 8087 is shared with the Dart prototype:
+run one backend at a time. Unlike the local Dart prototype, Workers requires a
+team code even locally. Flutter web uses port 8086 and **Server settings**.
+`GITLORE_API_URL` may contain the public HTTPS server URL, never a Gemini key.
+`backend/.env` is not read by Workers. AI disabled still uses direct keyless GitHub.
+
+### Verification for this branch
+
+Passed locally using Flutter 3.47.2 / Dart 3.13.2 and Node 24.15.0:
+
+- Root `flutter pub get --enforce-lockfile` and backend `dart pub get --enforce-lockfile`.
+- Dart format check across `lib test tool packages/gitlore_core/lib backend/bin backend/lib backend/test`.
+- Whole-project `flutter analyze --no-pub`: no issues. Backend
+  `dart analyze --fatal-infos`: no issues. Previous import errors are resolved.
+- `flutter test --no-pub --coverage`: **34 passed**, including the shared Worker
+  contract fixture. Earlier engine crashes did not recur during this run.
+- Backend `dart test`: **14 passed**, including both oversized-body cases.
+- Dart fixture generator `--check`: passed. Worker static output matches that
+  Dart example after normalizing only analysis version/timestamp; Ajv validates
+  the published schema. This is example parity, not universal compiler equivalence.
+- Worker clean `npm ci`: passed, audit reported zero vulnerabilities at restore.
+  Prettier and TypeScript checks passed. Node fixture suite: **54 passed**.
+  Workerd suite: **2 passed**, using actual SQLite storage, including object
+  restart/cache recovery. Outbound calls are mocked; no credentials needed.
+- `flutter build web --release --no-pub`: passed, including the Wasm dry run.
+- `npm run build`: Wrangler dry-run bundle passed (about 39.6 KiB / 12.1 KiB gzip).
+  This is packaging verification, not deployment.
+- `git diff --check`: passed before commit.
+
+### What remains unverified or limited
+
+- No Cloudflare account provisioning, hosted endpoint, deployed secrets, custom
+  origin, real Worker-to-Gemini request or hosted CPU/memory/quota test yet.
+  The selected model preserves the earlier local prototype setting; its access
+  and free allowance must be confirmed on the team's Google account. Provider
+  503s remain possible after the bounded retry and produce static fallback.
+- The shared team code protects a private demo, not a public multi-user service.
+  Invalid traffic can still consume Cloudflare requests. API budgets do not
+  eliminate unauthenticated GitHub rate limits or guarantee zero provider charges
+  if an owner later enables billing. Do not enable paid plans automatically.
+- No remote GitHub Actions run for this local branch yet. The local checks passed;
+  a future push/PR must obtain green remote CI. Docker image/native app builds,
+  live browser-to-Worker/Android HTTPS, secret rotation and device-restart UX were
+  not tested here. Earlier manual app demos apply to earlier code only.
+- Static resolvers remain lexical subsets with documented unsupported syntax.
+  AI citations prove a source reference exists, not that an explanation is correct.
+  Single-object coordination is intentionally sized for a small team.
+
+### Next concrete tasks and acceptance criteria
+
+1. **Review and deliver this branch:** once a push is authorized, push the feature
+   branch and open a PR against the team's agreed base; do not silently merge
+   main or the sprint. Require both CI jobs, artifacts and review before merging.
+2. **Authorized hosted acceptance (GL-03):** use Workers Free + SQLite; configure
+   real origins and server secrets through prompts; deploy only when authorized.
+   Verify health, denied access, static and AI responses decoded by Flutter,
+   citations, provider fallback, commit refresh and budgets after object restart.
+   Measure CPU/memory/latency with a representative large public tree. Record
+   the endpoint, account plan and outcomes here without secrets. GL-03 remains
+   incomplete until hosted acceptance passes.
+3. **Device acceptance (GL-04/UI):** save/open/replace/delete, restart the app and
+   verify persistence; exercise graph controls and hosted HTTPS on Android/web.
+   Add fixtures for any newly found behavior rather than relying on live keys.
+4. **Then product improvements:** progress states and screen extraction, better
+   monorepo coverage and automatic layout, Explore/shared persistence with explicit
+   access rules, stronger identity before public release, optional safe exports.
