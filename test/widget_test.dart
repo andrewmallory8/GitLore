@@ -17,6 +17,48 @@ class _RecordingDemo extends DemoArchitectureService {
 
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
+  testWidgets('server settings use hosted HTTPS and allow a local override', (
+    tester,
+  ) async {
+    await tester.pumpWidget(const GitLoreApp());
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Server settings'));
+    await tester.tap(find.text('Server settings'));
+    await tester.pumpAndSettle();
+    final address = find.byWidgetPredicate(
+      (w) => w is TextField && w.decoration?.labelText == 'Server URL',
+    );
+    final code = find.byWidgetPredicate(
+      (w) =>
+          w is TextField &&
+          w.decoration?.labelText == 'Team access code (if required)',
+    );
+    expect(
+      tester.widget<TextField>(address).controller!.text,
+      'https://gitlore-api.jack-j-dugan.workers.dev',
+    );
+    expect(tester.widget<TextField>(code).obscureText, isTrue);
+    await tester.enterText(address, 'http://untrusted.example');
+    await tester.tap(find.text('Use server'));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Use HTTPS, or HTTP for a local development server.'),
+      findsOneWidget,
+    );
+    await tester.enterText(address, 'http://127.0.0.1:8087');
+    await tester.tap(find.text('Use server'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Server settings'));
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<TextField>(address).controller!.text,
+      'http://127.0.0.1:8087',
+    );
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('reuses results and refreshes the displayed repository', (
     tester,
   ) async {

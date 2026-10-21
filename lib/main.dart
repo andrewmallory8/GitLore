@@ -81,7 +81,7 @@ class _GitLoreHomeState extends State<GitLoreHome> {
   bool _useAi = false;
   String _serverUrl = const String.fromEnvironment(
     'GITLORE_API_URL',
-    defaultValue: '',
+    defaultValue: 'https://gitlore-api.jack-j-dugan.workers.dev',
   );
   String _accessToken = '';
 

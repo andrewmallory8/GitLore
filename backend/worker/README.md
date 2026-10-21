@@ -3,7 +3,10 @@
 This is the selected hosted-server implementation. Flutter stays in Dart; Workers
 runs TypeScript. The Dart server above remains an optional local prototype.
 Both implement [analysis schema v1](../contracts/analysis-v1.schema.json).
-This change has not deployed Cloudflare resources or configured live secrets.
+The team server is deployed at
+<https://gitlore-api.jack-j-dugan.workers.dev>. See the latest
+[handover checkpoint](../../docs/HANDOVER.md) for secret configuration and live
+acceptance status; a deployed address alone does not prove AI is configured.
 
 ## Architecture and reasons
 
@@ -68,8 +71,9 @@ The local endpoint is port 8087. `/health` reports configuration presence only:
 a key is present; it does not prove Google accepted the key or has quota.
 
 Run Flutter web on port 8086, enable **AI explanation**, and open **Server
-settings**. Enter the Worker URL and team code. App defaults already use
-localhost:8087 (Android emulator uses 10.0.2.2). The team code stays in app-session
+settings**. The app defaults to the hosted HTTPS URL. Enter the team code.
+For local experiments, override the URL with localhost:8087 (Android emulator
+uses 10.0.2.2), using Server settings or `GITLORE_API_URL`. The team code stays in app-session
 memory; the Gemini key never enters Flutter. Turning AI off retains direct,
 keyless GitHub analysis. Run only one of the two local backends on port 8087.
 
@@ -141,7 +145,9 @@ Review future logging before enabling it. CI builds artifacts; it never deploys.
 ## Remaining limitations
 
 - Hosted provisioning, live secrets/Gemini, CPU/memory fit and public uptime are
-  unverified. Local fixtures do not establish these properties.
+  separate acceptance items. The Worker and SQLite namespace are provisioned;
+  consult the latest handover for live tests. Local fixtures do not establish
+  provider availability, maximum-size resource fit or public uptime.
 - Public launch needs individual identity and stronger abuse controls. Invalid
   requests do not reach the coordinator but can still consume Worker requests.
 - GitHub is unauthenticated and shares server-side public API quotas; even the

@@ -37,11 +37,15 @@ Public GitHub requests share an unauthenticated API quota. One analysis uses thr
 Cloudflare Workers is the selected host. The [Workers backend and runbook](backend/worker/README.md)
 provide a server-only Gemini key, team access code, bounded requests, checked
 citations, durable budgets/cache, retries and static fallback. Implementation is
-tested locally; hosted deployment remains pending. The [Dart prototype](backend/README.md)
+tested locally and deployed at [the team server](https://gitlore-api.jack-j-dugan.workers.dev).
+See the latest [handover](docs/HANDOVER.md) for live acceptance and Gemini setup status.
+The [Dart prototype](backend/README.md)
 is still available for local experiments.
 
-Enable **AI explanation**, then use **Server settings** to enter the server URL
-and team code. Enter the Gemini key only in the server's secret store. The public
+Enable **AI explanation**, then use **Server settings** to enter the team code;
+the hosted URL is already the default. Enter the Gemini key only in the server's
+secret store. For local development, change Server settings to port 8087 or use
+`--dart-define=GITLORE_API_URL=http://127.0.0.1:8087` (Android emulator: `10.0.2.2`). The public
 URL may also be set with `--dart-define=GITLORE_API_URL=...`; never use a define
 for a privileged key. Turning AI off preserves direct keyless GitHub analysis.
 Provider failures show a static fallback and retry action.
@@ -85,6 +89,13 @@ dart test
 ```
 
 Unit tests use mocked GitHub responses and verify commit pinning, content-based results, literal import edges, bounded sampling, partial coverage, invalid URLs, and API failures. Widget tests cover source excerpts, chapters, saved projects, and narrow layouts. Run the separate [Worker checks](backend/worker/README.md#verification) too. The optional root command `dart run tool/analyze_repository.dart https://github.com/expressjs/express` performs a real public GitHub smoke test without launching Flutter.
+
+The same CLI can check the hosted server using runtime environment variables:
+`GITLORE_API_URL` for its HTTPS URL, `GITLORE_TEAM_ACCESS_TOKEN` for the team code,
+and optional `GITLORE_AI=true` for an AI request. These are CLI environment
+variables, not Flutter build defines. Load the team code privately from your
+ignored settings; never paste it into a command, log or Git. Static requests are
+the CLI default and consume no Gemini quota. Live checks are intentionally outside CI.
 
 ## Automated builds
 

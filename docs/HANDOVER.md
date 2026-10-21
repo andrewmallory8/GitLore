@@ -2,7 +2,7 @@
 
 Last updated: 2026-10-21 (America/Chicago).
 Current pass: `codex/cloudflare-worker`, based on `feat/sprint-gl-01-04` at `13e00c3`.
-See **Cloudflare agent connection — 2026-10-21** at the end for the current setup
+See **First hosted deployment — 2026-10-21** at the end for the current setup
 checkpoint and **Cloudflare implementation handoff — 2026-10-21** for implementation
 decisions, verification, limitations and the next task. Dated entries preserve
 history; the newest entry supersedes older status/hosting decisions.
@@ -701,3 +701,67 @@ Passed locally using Flutter 3.47.2 / Dart 3.13.2 and Node 24.15.0:
   within the user's ongoing server-setup request; no additional generic permission
   question is needed for that already authorized work. New scopes/paid services
   or unrelated resources still require their own authorization.
+
+## First hosted deployment — 2026-10-21
+
+- User completed email verification. Confirmed the blocking modal/banner cleared.
+  Dashboard shows the free-tier 100,000 requests/day and 200,000 observability
+  events/day allowances. No upgrade, payment, domain or other paid service enabled.
+- The account had no existing Worker scripts. Deployed the reviewed Wrangler
+  dry-run `dist/index.js` bundle through the newly authorized Cloudflare MCP
+  script upload endpoint, rather than extracting OAuth credentials for Wrangler.
+  This preserves the existing local Wrangler build and selected deployment config.
+- Worker: `gitlore-api`; account: `637c176c0cd455f0beeec6d3cf4f5d12`;
+  public endpoint: <https://gitlore-api.jack-j-dugan.workers.dev>.
+  Enabled workers.dev; disabled preview URLs. Initial deployment UI reported Ready
+  (version prefix `745038ee`). Migration `v1` created SQLite namespace
+  `d427c414ef094fc9a46a9a5cfd59f2ad` for `AnalysisCoordinator`; `ANALYSES` is bound.
+- Reconciled public variables with wrangler.jsonc: model `gemini-3.8-flash`, browser
+  origins `http://localhost:8086,http://127.0.0.1:8086`, compatibility 2026-10-21.
+  Logs/traces remain disabled by the existing credential/source privacy decision;
+  review sanitized observability before a broader public release.
+- The first HTTPS probe hit a transient TLS handshake failure; a later normal
+  certificate-verified request succeeded. No TLS check was bypassed. Health
+  returned the expected 503/not_configured and aiConfigured:false before secrets:
+  the deployed service fails closed until TEAM_ACCESS_TOKEN is configured.
+- Generated a random 32-byte team code in ignored `backend/worker/.dev.vars`;
+  it was not printed or committed. Gemini is blank locally. Opened that file
+  in Notepad for the user to copy its team-code value directly to Cloudflare.
+  The user is adding Production secrets with the Secret checkbox selected:
+  TEAM_ACCESS_TOKEN and optionally GEMINI_API_KEY from the teammate. Do not read
+  private key values or capture the secret-entry screen. No Gemini key was copied
+  from backend/.env. Secret names/health presence can be checked without values.
+- Flutter's default AI server URL now points to the hosted endpoint; an explicit
+  GITLORE_API_URL or Server settings still selects a local development server.
+  AI remains off by default, preserving keyless direct GitHub analysis.
+- Extended the existing Dart CLI to optionally use ServerArchitectureService:
+  runtime environment GITLORE_API_URL / GITLORE_TEAM_ACCESS_TOKEN, optional
+  GITLORE_AI=true. Defaults remain direct static GitHub. Never use a Flutter
+  build define for the team credential. This permits an actual hosted response
+  to be decoded through the same schema/evidence boundary used by Flutter.
+- Added a network-free widget check for hosted HTTPS default, masked team-code
+  input, rejection of insecure remote URLs and acceptance of a local override.
+  Root locked restore, whole-project analysis and all 35 Flutter tests passed.
+  Worker locked restore/audit (zero vulnerabilities), format/types, 54 fixture
+  tests, two workerd tests and dry-run bundle passed. Additional validation and
+  live results will be recorded below once remaining checks/secret entry finish.
+- Remaining local checks completed: format check (34 files), Dart fixture parity,
+  backend locked restore and issue-free analyzer, all 14 backend tests, and the
+  release web build (including Wasm dry run) passed. Total fixture/widget/runtime
+  tests this pass: 105. The rebuilt app is served locally on 127.0.0.1:8086 by a
+  session-dependent Python server; restart that server if it is no longer running.
+- The first private-file open in Codex was queued, so Notepad was launched for
+  the user's explicit request to find the team code. Its content was not captured.
+  Secret entry remains with the user; the latest safe health check still reports
+  503/not_configured, aiConfigured:false. This is expected until the secrets deploy.
+- User needed help locating Cloudflare's entry form. In the in-app browser, the
+  Add variable form is open with Production selected, key TEAM_ACCESS_TOKEN filled
+  and Secret checked. The value is blank for the user to paste from Notepad.
+  No credential was entered or submitted by the agent. After the user deploys
+  the secret, verify its name/presence and health; do not capture the entry screen
+  while the user is typing. Gemini secret entry is still pending as well.
+- Pending: verify secret presence/health, wrong-code rejection, browser CORS and
+  authenticated static analysis/caching, then real Gemini output or safe fallback.
+  Build the release web app and verify the browser against the hosted service.
+  Hosted maximum-tree CPU/memory, native device acceptance, uptime and remote
+  GitHub CI remain separate checks. No push or merge has been performed.
