@@ -2,7 +2,7 @@
 
 Last updated: 2026-10-21 (America/Chicago).
 Current pass: `codex/cloudflare-worker`, based on `feat/sprint-gl-01-04` at `13e00c3`.
-See **Cloudflare account setup — 2026-10-21** at the end for the current setup
+See **Cloudflare agent connection — 2026-10-21** at the end for the current setup
 checkpoint and **Cloudflare implementation handoff — 2026-10-21** for implementation
 decisions, verification, limitations and the next task. Dated entries preserve
 history; the newest entry supersedes older status/hosting decisions.
@@ -648,3 +648,48 @@ Passed locally using Flutter 3.47.2 / Dart 3.13.2 and Node 24.15.0:
   Then connect Flutter using the actual public HTTPS URL and record live results.
   The teammate who owns the Gemini key may need to enter it directly; never ask
   them to paste it into chat. No hosted URL exists yet, so none has been hardcoded.
+
+## Cloudflare agent connection — 2026-10-21
+
+- User created the Cloudflare account and explicitly requested executing the
+  appropriate official instructions from
+  <https://developers.cloudflare.com/agent-setup/prompt.md>. Retrieved that file
+  directly; applied the Codex instructions, preserving the existing Wrangler app.
+- Installed all 19 skills from the official `cloudflare/skills` repository into
+  this developer's `C:\Users\jackj\.codex\skills\` using the Codex skill installer.
+  This is local tooling, not a Flutter or server dependency. Skills become
+  available on the next turn; MCP loading requires restarting the agent/app.
+- Backed up the existing Codex configuration locally before registering a single
+  `cloudflare` MCP server at `https://mcp.cloudflare.com/mcp`. Used `codex mcp add`
+  to preserve unrelated settings. No credentials/config backups are in this repo.
+- The automatic initial OAuth request advertised broad platform permissions. It
+  was cancelled before authorization. Requested only `offline_access`, `user:read`,
+  `account:read`, `workers-scripts.read`, `workers-scripts.write`, and
+  `workers-tail.read` in the subsequent login.
+- Automatic approval review distinguished the MCP grant from the previously
+  approved Wrangler grant. User explicitly approved this separate saved MCP
+  connection, including account/profile read, Worker script/Durable Object
+  read/write and diagnostic access. User completed the official browser consent.
+  Do not re-request the same approval when continuing this setup.
+- Verified: CLI reported `Successfully logged in to MCP server 'cloudflare'`.
+  `codex mcp list --json` confirms the server is enabled, uses streamable HTTP
+  and has OAuth authentication. Counted all 19 installed skill directories.
+  This session's callable tools still lack Cloudflare: restart Codex to load it.
+  Do not inspect stored OAuth credentials or manually extract tokens as a workaround.
+- Skipped optional global beta `cf` CLI and user-level instruction changes:
+  this project already uses Wrangler, which the official skills explicitly retain.
+- No project runtime code changed. Only documentation changed in this checkpoint;
+  `git diff --check` is the relevant validation. Last runtime verification remains
+  the successful 54 fixture tests, two workerd tests and bundle recorded above.
+- The connection is developer access to Cloudflare, not a deployed GitLore server.
+  No server secrets or live endpoint exist yet; no deployment, push, merge or
+  billing change occurred. Account Free-plan status has not yet been inspected.
+- **Next action:** restart Codex, reopen this chat and continue hosted setup.
+  Read the installed `wrangler`/`durable-objects` guidance as applicable. Use the
+  newly connected MCP to verify the account/Free plan and inspect existing Workers
+  before deploying `gitlore-api`. Keep the versioned schema and SQLite migration;
+  use Cloudflare's secret interface for Gemini and team credentials, then connect
+  Flutter to the actual HTTPS URL and run live acceptance. Deployment remains
+  within the user's ongoing server-setup request; no additional generic permission
+  question is needed for that already authorized work. New scopes/paid services
+  or unrelated resources still require their own authorization.

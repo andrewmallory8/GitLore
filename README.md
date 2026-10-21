@@ -46,6 +46,13 @@ URL may also be set with `--dart-define=GITLORE_API_URL=...`; never use a define
 for a privileged key. Turning AI off preserves direct keyless GitHub analysis.
 Provider failures show a static fallback and retry action.
 
+Cloudflare's optional [agent setup guide](https://developers.cloudflare.com/agent-setup/prompt.md)
+connects developer tools to Cloudflare through OAuth and installs coding skills.
+This is local developer setup, separate from deploying the GitLore server or
+configuring its Gemini key. Each developer authorizes their own connection;
+Codex needs a restart to load a newly registered MCP server. Keep its configuration
+and OAuth credentials outside this repository.
+
 ## Team handoff
 
 | Owner | Starting files | Next milestone |
