@@ -74,7 +74,9 @@ export async function fetchJson(
     const response = await fetcher(url, {
       ...init,
       signal: abort.signal,
-      redirect: "error",
+      // Workers does not implement redirect:"error". Manual returns 3xx to
+      // callers, which reject it without forwarding credentials to Location.
+      redirect: "manual",
     });
     // Never read, log, or echo provider diagnostic bodies on HTTP errors.
     if (!response.ok) {
@@ -86,6 +88,14 @@ export async function fetchJson(
       new TextDecoder("utf-8", { fatal: true, ignoreBOM: false }).decode(bytes),
     );
     return { status: response.status, headers: response.headers, body };
+  } catch (error) {
+    if (abort.signal.aborted)
+      throw new ApiError(
+        504,
+        "upstream_timeout",
+        "The upstream request timed out.",
+      );
+    throw error;
   } finally {
     clearTimeout(timer);
   }

@@ -8,6 +8,11 @@ The team server is deployed at
 [handover checkpoint](../../docs/HANDOVER.md) for secret configuration and live
 acceptance status; a deployed address alone does not prove AI is configured.
 
+As of 2026-10-21 both encrypted Production secrets are present and health,
+authentication, CORS, static analysis and caching passed live checks. Gemini
+generation is not yet accepted: live requests returned timeouts or HTTP 503 and
+the server returned static fallback. No key value is exposed by health checks.
+
 ## Architecture and reasons
 
 ```text
@@ -41,6 +46,7 @@ Google and GitHub apply their own quotas independently of these safeguards.
 | Deadlines | GitHub 20 seconds/request, 90 total; Gemini 20 seconds/attempt within 45 total |
 | Source | Eight files; 40,000 bytes/file; 180,000 combined; 8 MB tree / 70 KB blob JSON |
 | AI input | 100 lines and 5,000 characters/file; 24,000 characters combined |
+| Gemini generation | 4,096 output tokens; low thinking for Gemini 3; prompt/cache version worker-story-v2 |
 | Output | 1.5 MB; AI evidence must cite supplied lines belonging to an existing node |
 | Cache | Ten entries; ten-minute TTL; durable LRU keyed by commit, analyzer, model and prompt |
 
@@ -88,6 +94,9 @@ keyless GitHub analysis. Run only one of the two local backends on port 8087.
 safe code/message. 401 means invalid team code, 403 a denied origin, 429 the team
 budget/concurrency limit, and 503 incomplete configuration. Gemini failures
 generally return HTTP 200 with a visibly labeled static result.
+Timeout and incomplete-generation notices distinguish those cases without
+exposing provider diagnostics. Gemini 3 uses low thinking to reduce latency;
+older model families omit that setting. This does not guarantee availability.
 
 ## Verification
 

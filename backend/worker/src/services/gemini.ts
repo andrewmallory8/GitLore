@@ -1,4 +1,5 @@
 import {
+  ApiError,
   record,
   text,
   list,
@@ -10,7 +11,7 @@ import {
 } from "../contracts";
 import { fetchJson, type Fetcher } from "../http";
 
-export const PROMPT_VERSION = "worker-story-v1";
+export const PROMPT_VERSION = "worker-story-v2";
 export const chapterSchema = {
   type: "object",
   required: ["chapters"],
@@ -139,6 +140,11 @@ export async function enhance(
     generationConfig: {
       temperature: 0.2,
       maxOutputTokens: 4096,
+      // Gemini 3 defaults to more reasoning than this bounded code tour needs.
+      // 2.5 uses a different API; do not send thinkingLevel to older models.
+      ...(options.model.startsWith("gemini-3")
+        ? { thinkingConfig: { thinkingLevel: "low" } }
+        : {}),
       responseMimeType: "application/json",
       responseSchema: chapterSchema,
     },
@@ -194,7 +200,10 @@ export async function enhance(
       }
       const candidate = record(list(record(r.body).candidates, 10)[0]);
       if (candidate.finishReason !== "STOP")
-        throw new Error("Incomplete output");
+        return fallback(
+          a,
+          "Gemini returned an incomplete explanation. Showing static analysis; try again later.",
+        );
       const output = list(record(candidate.content).parts, 30)
         .map(record)
         .filter((p) => p.thought !== true)
@@ -233,8 +242,13 @@ export async function enhance(
         ],
       });
     }
-  } catch {
+  } catch (error) {
     // Do not disclose raw transport exceptions, provider bodies, or credentials.
+    if (error instanceof ApiError && error.code === "upstream_timeout")
+      return fallback(
+        a,
+        "Gemini did not respond within the server time limit. Showing static analysis; try again later.",
+      );
     return fallback(
       a,
       "AI explanation was unavailable, timed out, or failed evidence validation. Showing static analysis; try Refresh analysis later.",

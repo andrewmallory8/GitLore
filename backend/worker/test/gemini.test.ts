@@ -1,6 +1,61 @@
 import { expect, it, vi } from "vitest";
 import { enhance } from "../src/services/gemini";
+import { ApiError } from "../src/contracts";
 import { aiBody, result } from "./helpers";
+
+it.each(["gemini-3.8-flash", "gemini-2.5-flash"])(
+  "uses a supported reasoning configuration for %s",
+  async (model) => {
+    const output = await enhance(result(), {
+      apiKey: "fixture",
+      model,
+      reserve: async () => true,
+      fetcher: async (_url, init) => {
+        const config = JSON.parse(String(init?.body)).generationConfig;
+        expect(config.thinkingConfig).toEqual(
+          model.startsWith("gemini-3") ? { thinkingLevel: "low" } : undefined,
+        );
+        expect(config.maxOutputTokens).toBe(4096);
+        return Response.json(aiBody());
+      },
+    });
+    expect(output.analysisKind).toBe("ai");
+    expect(output.analysisVersion).toBe("worker-story-v2");
+  },
+);
+
+it("reports incomplete generation without exposing provider details", async () => {
+  const output = await enhance(result(), {
+    apiKey: "fixture",
+    model: "gemini-fixture",
+    reserve: async () => true,
+    fetcher: async () =>
+      Response.json({
+        candidates: [
+          {
+            finishReason: "MAX_TOKENS",
+            content: { parts: [{ text: "private incomplete text" }] },
+          },
+        ],
+      }),
+  });
+  expect(output.analysisKind).toBe("static");
+  expect(output.warnings.at(-1)).toContain("incomplete explanation");
+  expect(JSON.stringify(output)).not.toContain("private incomplete text");
+});
+
+it("distinguishes the provider deadline from evidence validation", async () => {
+  const output = await enhance(result(), {
+    apiKey: "fixture",
+    model: "gemini-fixture",
+    reserve: async () => true,
+    fetcher: async () => {
+      throw new ApiError(504, "upstream_timeout", "private diagnostic");
+    },
+  });
+  expect(output.warnings.at(-1)).toContain("server time limit");
+  expect(JSON.stringify(output)).not.toContain("private diagnostic");
+});
 
 it("returns evidence-backed chapters and sends credentials only as a header", async () => {
   const fetcher = vi.fn<typeof fetch>(async (url, init) => {
@@ -9,7 +64,7 @@ it("returns evidence-backed chapters and sends credentials only as a header", as
       "fixture-secret",
     );
     expect(init?.body).not.toContain("fixture-secret");
-    expect(init?.redirect).toBe("error");
+    expect(init?.redirect).toBe("manual");
     expect(
       JSON.parse(String(init?.body)).generationConfig.responseSchema,
     ).toHaveProperty("properties.chapters");

@@ -2,7 +2,7 @@
 
 Last updated: 2026-10-21 (America/Chicago).
 Current pass: `codex/cloudflare-worker`, based on `feat/sprint-gl-01-04` at `13e00c3`.
-See **First hosted deployment — 2026-10-21** at the end for the current setup
+See **Hosted secret verification and runtime fixes — 2026-10-21** at the end for the current setup
 checkpoint and **Cloudflare implementation handoff — 2026-10-21** for implementation
 decisions, verification, limitations and the next task. Dated entries preserve
 history; the newest entry supersedes older status/hosting decisions.
@@ -33,9 +33,12 @@ success was reported, alongside frequent 503 fallbacks.
 **This pass adds:** Cloudflare Workers backend, SQLite Durable Object cache and
 team budgets, bounded Gemini retries/evidence validation, a shared Dart package
 that fixes backend import analysis, deterministic cross-language/runtime fixtures,
-and expanded CI. The Workers implementation is locally verified, not deployed.
+and expanded CI. The Worker is deployed with both encrypted secrets. Hosted
+authentication, CORS, static analysis and cache checks passed; real AI generation
+still falls back after provider timeouts/HTTP 503. Do not call AI acceptance complete.
 
-**Still pending:** hosted provisioning/secrets/live acceptance; individual user
+**Still pending:** successful hosted Gemini output and Flutter browser/native
+acceptance against the server; maximum-size hosted resource checks; individual user
 accounts/public abuse controls; automatic layout, Mermaid export, Explore, shared
 history and broader mobile/restart acceptance. Static import edges are not runtime
 traces, and AI explanations remain clearly labeled interpretations.
@@ -765,3 +768,63 @@ Passed locally using Flutter 3.47.2 / Dart 3.13.2 and Node 24.15.0:
   Build the release web app and verify the browser against the hosted service.
   Hosted maximum-tree CPU/memory, native device acceptance, uptime and remote
   GitHub CI remain separate checks. No push or merge has been performed.
+
+## Hosted secret verification and runtime fixes — 2026-10-21
+
+- User confirmed adding both Production secrets. Verified only names/types:
+  `TEAM_ACCESS_TOKEN` and `GEMINI_API_KEY` are `secret_text`. Never retrieved their
+  values. `/health` now returns HTTP 200, `status:ok`, `aiConfigured:true`.
+  Presence does not establish provider availability or successful generation.
+- Live wrong-code rejection returned 401; allowed-origin preflight returned 204
+  with the exact origin; a denied origin returned 403. Authenticated static
+  analysis was decoded by the shared Dart server adapter used by Flutter.
+- First hosted GitHub analysis exposed a platform mismatch: Workers rejects
+  `redirect:"error"` before making the request. Node fetch mocks had hidden this.
+  Changed outbound fetches to `redirect:"manual"`; callers reject 3xx without
+  following Location or forwarding credentials. Confirmed the old code failed
+  a new native workerd Request regression before applying the fix. See
+  <https://developers.cloudflare.com/workers/runtime-apis/request/>.
+- The deployed fix successfully sampled eight files/146 tree entries from
+  `andrewmallory8/GitLore`, commit
+  `db8ac640f62a1e07a717b4a6842cb917c991f4ab`, producing nine nodes/ten import edges.
+  Two sequential static requests returned HTTP 200 with identical snapshots,
+  commit and generatedAt, and the expected browser CORS header. Two earlier
+  simultaneous probes returned 502; cause remains unconfirmed. These are not
+  counted as passing cache tests or evidence of sustained reliability.
+- Added safe, distinct notices for an upstream deadline and incomplete Gemini
+  generation; raw exceptions/provider bodies remain hidden. Aborts now surface
+  as typed `upstream_timeout` errors, with deterministic regression coverage.
+- Live AI probes on GitLore and the one-file `octocat/Hello-World` returned
+  schema-valid static fallback, including confirmed 20-second provider deadline
+  failures and HTTP 503. No successful hosted AI chapters/citations yet. These
+  results do not prove the key is invalid; do not rotate it based only on these
+  failures. Failed AI results remain uncached and all attempts consume quota.
+- Gemini 3 requests now specify `thinkingConfig.thinkingLevel:"low"`, keeping
+  4,096 output tokens and existing 20-second attempt/45-second total deadlines.
+  This follows Google's guidance to reduce reasoning for latency; it has not
+  resolved the observed provider failures. Older model families omit the setting
+  because 2.5 uses a different API. Bumped prompt/cache version to `worker-story-v2`.
+  Reference: <https://ai.google.dev/gemini-api/docs/generate-content/thinking>.
+- Deployed the tested bundle through authorized Cloudflare MCP. Preserved both
+  secret bindings with `keep_bindings:["secret_text"]` and the existing SQLite
+  namespace/migration v1. Latest script etag:
+  `bcdb78ca80570a2444ee86974bb44eb81ffd1901c2f151debf992ada54fc42e4`.
+  Verified secret names/types and healthy configuration after the update.
+- Validation: Worker formatting/types, **58** Node fixture tests, **3** real
+  workerd tests and dry-run build passed (40.53 KiB / 12.40 KiB gzip). Prior
+  unchanged Dart validation in this setup pass: locked restores, format, fixture
+  parity, static analysis, **35** Flutter tests, **14** Dart backend tests and
+  release web build passed: **110** total local tests with the updated Worker.
+  No remote GitHub CI, native-device acceptance, hosted large-tree benchmark or
+  authenticated Flutter browser walkthrough was performed. API/adapter acceptance
+  is not the same as browser UI acceptance. Logs/traces remain disabled pending
+  deliberate sanitized observability work. No push or merge in this checkpoint.
+- **Next concrete task:** retry one small AI analysis after provider recovery;
+  check Google AI Studio model/key access and free quota privately if it still
+  fails. Verify real chapters with checked citations before calling AI ready.
+  Keep quota/deadline safeguards; do not solve availability by enabling billing.
+  Then run Flutter on port 8086, enter the team code in Server settings, enable
+  AI explanation and verify loading, source links and failure/retry behavior.
+  The URL already defaults to <https://gitlore-api.jack-j-dugan.workers.dev>.
+  Browser origins currently allow only localhost/127.0.0.1:8086; add a future
+  hosted Flutter origin deliberately. Team code is session-only, entered at runtime.

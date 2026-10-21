@@ -1,9 +1,36 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { SELF, abortAllDurableObjects } from "cloudflare:test";
 import { token, mockGitHub } from "../helpers";
+import { fetchJson } from "../../src/http";
 
 afterEach(() => {
   vi.unstubAllGlobals();
+});
+
+it("uses native Workers Request options and never follows a provider redirect", async () => {
+  for (const url of [
+    "https://api.github.com/repos/team/orchard",
+    "https://generativelanguage.googleapis.com/v1beta/models/fixture:generateContent",
+  ]) {
+    const outbound = vi.fn<typeof fetch>(async (input, init) => {
+      const request = new Request(input, init);
+      expect(request.redirect).toBe("manual");
+      return new Response(null, {
+        status: 302,
+        headers: { Location: "https://untrusted.invalid/collect" },
+      });
+    });
+    const result = await fetchJson(
+      url,
+      { headers: { "x-goog-api-key": "fixture-only" } },
+      1000,
+      1000,
+      outbound,
+    );
+    expect(result.status).toBe(302);
+    expect(result.body).toBeNull();
+    expect(outbound).toHaveBeenCalledTimes(1);
+  }
 });
 
 it("runs health, CORS and authentication in the real Workers runtime", async () => {
@@ -28,7 +55,11 @@ it("runs health, CORS and authentication in the real Workers runtime", async () 
 });
 
 it("uses the actual SQLite Durable Object and caches a validated snapshot", async () => {
-  const outbound = vi.fn<typeof fetch>(async (url) => mockGitHub(url));
+  // Construct a native Request before returning the fixture so unsupported
+  // Workers fetch options cannot be hidden by the network mock.
+  const outbound = vi.fn<typeof fetch>(async (url, init) =>
+    mockGitHub(new Request(url, init)),
+  );
   vi.stubGlobal("fetch", outbound);
   const analyze = () =>
     SELF.fetch("https://worker/v1/analyze", {

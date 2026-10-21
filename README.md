@@ -39,6 +39,9 @@ provide a server-only Gemini key, team access code, bounded requests, checked
 citations, durable budgets/cache, retries and static fallback. Implementation is
 tested locally and deployed at [the team server](https://gitlore-api.jack-j-dugan.workers.dev).
 See the latest [handover](docs/HANDOVER.md) for live acceptance and Gemini setup status.
+Both server secrets are configured. Hosted static analysis, authentication and
+caching passed live checks; Gemini currently falls back after provider timeouts
+or temporary service errors. Successful hosted AI output remains a pending check.
 The [Dart prototype](backend/README.md)
 is still available for local experiments.
 

@@ -6,7 +6,7 @@ import { mockGitHub } from "./helpers";
 it("resolves a branch to a commit and reads blobs by immutable SHA", async () => {
   const fetcher = vi.fn<typeof fetch>(async (url, init) => {
     expect(init?.headers).toHaveProperty("User-Agent", "GitLore-Worker/1");
-    expect(init?.redirect).toBe("error");
+    expect(init?.redirect).toBe("manual");
     return mockGitHub(url);
   });
   const crawler = new GitHubCrawler(fetcher),
@@ -97,7 +97,7 @@ it("aborts the upstream transport at its deadline", async () => {
     });
   await expect(
     fetchJson("https://api.github.com/fixture", {}, 100, 5, fetcher),
-  ).rejects.toThrow("aborted");
+  ).rejects.toMatchObject({ status: 504, code: "upstream_timeout" });
 });
 
 it("cancels a stalled incoming body at its deadline", async () => {
