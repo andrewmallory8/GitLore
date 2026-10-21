@@ -2,7 +2,8 @@
 
 Last updated: 2026-10-21 (America/Chicago).
 Current pass: `codex/cloudflare-worker`, based on `feat/sprint-gl-01-04` at `13e00c3`.
-See **Cloudflare implementation handoff — 2026-10-21** at the end for current
+See **Cloudflare account setup — 2026-10-21** at the end for the current setup
+checkpoint and **Cloudflare implementation handoff — 2026-10-21** for implementation
 decisions, verification, limitations and the next task. Dated entries preserve
 history; the newest entry supersedes older status/hosting decisions.
 Read this file together with root [`AGENTS.md`](../AGENTS.md) and the latest Git history.
@@ -616,3 +617,34 @@ Passed locally using Flutter 3.47.2 / Dart 3.13.2 and Node 24.15.0:
 4. **Then product improvements:** progress states and screen extraction, better
    monorepo coverage and automatic layout, Explore/shared persistence with explicit
    access rules, stronger identity before public release, optional safe exports.
+
+## Cloudflare account setup — 2026-10-21
+
+- User authorized starting Cloudflare setup and connecting the app. The code
+  remains on `codex/cloudflare-worker`, implementation commit `75a7eff`.
+- `wrangler whoami` confirmed this machine is not authenticated. User needs to
+  create a Cloudflare account; the in-app browser is open to the official signup
+  page. Account creation, email verification and any terms acceptance are for the
+  user to complete. Keep Workers Free; no domain or paid plan has been configured.
+- Automatic approval review initially rejected persistent Worker write access
+  without permission for those scopes. User then explicitly approved account/profile
+  read, Worker script/Durable Object write and Worker diagnostic read, with saved
+  local authorization. Use the limited login command below, not Wrangler's much
+  broader default scopes. Do not request the same approved permissions again:
+  `wrangler login --scopes account:read user:read workers_scripts:write workers_tail:read`.
+  The localhost OAuth callback also requests offline access to retain the login.
+- The OAuth attempt expired while waiting for account creation and then exited
+  with a Windows native-handle assertion. It did not authenticate or deploy.
+  Restart the official OAuth flow once signup/email verification is complete. Do not reuse an
+  expired authorization URL or inspect stored credential files. Let the user
+  complete authentication and approve the permissions in the browser.
+- Rechecked Worker TypeScript, 54 fixture tests, two workerd/SQLite runtime tests,
+  and the dry-run bundle: all passed. No production deployment or secret upload
+  was attempted. No key was read or copied from the local Dart prototype.
+- Next: confirm successful login and account Free plan; check for an existing
+  `gitlore-api` before creating/updating it; deploy the reviewed Worker with its
+  SQLite migration; enter the team code and Gemini key through Cloudflare's secret
+  interface; verify health, authentication, CORS, static result and AI/fallback.
+  Then connect Flutter using the actual public HTTPS URL and record live results.
+  The teammate who owns the Gemini key may need to enter it directly; never ask
+  them to paste it into chat. No hosted URL exists yet, so none has been hardcoded.
