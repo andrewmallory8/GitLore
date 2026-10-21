@@ -50,7 +50,7 @@ Cloudflare's optional [agent setup guide](https://developers.cloudflare.com/agen
 connects developer tools to Cloudflare through OAuth and installs coding skills.
 This is local developer setup, separate from deploying the GitLore server or
 configuring its Gemini key. Each developer authorizes their own connection;
-Codex needs a restart to load a newly registered MCP server. Keep its configuration
+If the new tools do not appear, restart Codex to load the MCP server. Keep its configuration
 and OAuth credentials outside this repository.
 
 ## Team handoff

@@ -658,7 +658,8 @@ Passed locally using Flutter 3.47.2 / Dart 3.13.2 and Node 24.15.0:
 - Installed all 19 skills from the official `cloudflare/skills` repository into
   this developer's `C:\Users\jackj\.codex\skills\` using the Codex skill installer.
   This is local tooling, not a Flutter or server dependency. Skills become
-  available on the next turn; MCP loading requires restarting the agent/app.
+  available on the next turn. The MCP initially appeared to need an app restart,
+  but its tools became available dynamically later in this session.
 - Backed up the existing Codex configuration locally before registering a single
   `cloudflare` MCP server at `https://mcp.cloudflare.com/mcp`. Used `codex mcp add`
   to preserve unrelated settings. No credentials/config backups are in this repo.
@@ -674,7 +675,7 @@ Passed locally using Flutter 3.47.2 / Dart 3.13.2 and Node 24.15.0:
 - Verified: CLI reported `Successfully logged in to MCP server 'cloudflare'`.
   `codex mcp list --json` confirms the server is enabled, uses streamable HTTP
   and has OAuth authentication. Counted all 19 installed skill directories.
-  This session's callable tools still lack Cloudflare: restart Codex to load it.
+  Cloudflare tools subsequently loaded in this session; no restart is needed now.
   Do not inspect stored OAuth credentials or manually extract tokens as a workaround.
 - Skipped optional global beta `cf` CLI and user-level instruction changes:
   this project already uses Wrangler, which the official skills explicitly retain.
@@ -684,7 +685,14 @@ Passed locally using Flutter 3.47.2 / Dart 3.13.2 and Node 24.15.0:
 - The connection is developer access to Cloudflare, not a deployed GitLore server.
   No server secrets or live endpoint exist yet; no deployment, push, merge or
   billing change occurred. Account Free-plan status has not yet been inspected.
-- **Next action:** restart Codex, reopen this chat and continue hosted setup.
+- Verified live MCP identity/account lookup and Workers list: the connected
+  account has no Workers. Account settings use the `standard` usage model (this
+  alone does not establish Free-plan billing status). Workers has no subdomain yet.
+  Opening the official Workers landing page shows an email-verification modal:
+  user must verify email before Workers setup can proceed. User has been asked
+  to click Cloudflare's email verification link. Do not bypass that prerequisite
+  with an API deployment. No verification email was requested/sent by the agent.
+- **Next action:** after the user verifies email, continue hosted setup.
   Read the installed `wrangler`/`durable-objects` guidance as applicable. Use the
   newly connected MCP to verify the account/Free plan and inspect existing Workers
   before deploying `gitlore-api`. Keep the versioned schema and SQLite migration;
