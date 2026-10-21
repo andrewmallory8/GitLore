@@ -9,6 +9,71 @@ history; the newest entry supersedes older status/hosting decisions.
 Read this file together with root [`AGENTS.md`](../AGENTS.md) and the latest Git history.
 This is a living project status document; update it in every implementation PR.
 
+## Start here: next contributor or AI agent
+
+This branch is `codex/cloudflare-worker`. The latest runtime fix is commit
+`4827f68`; subsequent documentation commits refine this handoff. Check out this
+branch to continue the server work: the default branch may not contain it yet.
+Start with `git status` and recent commits; preserve any teammate's local work,
+then fetch and fast-forward the feature branch. Do not reset or force-push to
+make checkouts match. Read the current summary and issue table below before
+using the older chronological entries, whose pending statuses are historical.
+
+- **Application:** Flutter/Dart. Shared non-Flutter code belongs in
+  `packages/gitlore_core/lib/`; `lib/models/` and `lib/services/` include compatibility
+  exports. Worker server code belongs in `backend/worker/src/`, with services in
+  its `services/` subfolder. Keep fetching and analysis out of widgets.
+- **Hosted service:** <https://gitlore-api.jack-j-dugan.workers.dev>.
+  Cloudflare Worker `gitlore-api`; durable class `AnalysisCoordinator`, binding
+  `ANALYSES`, migration `v1`. Preserve the singleton name, namespace and secrets
+  when updating it. Never recreate storage to clear budgets or cache.
+- **Secrets:** Gemini and team credentials are already encrypted in Production.
+  They are intentionally absent from Git. Another laptop needs its own private
+  local configuration and developer authorization; do not copy this machine's
+  OAuth credentials. The owner supplies the existing team code privately for app
+  Server settings. Never generate a replacement production code unintentionally.
+- **Runtime settings:** default `gemini-3.5-flash-lite`, prompt `worker-story-v3`;
+  browser origins localhost/127.0.0.1 on port **8086**. Local optional server uses
+  **8087**. AI is off by default; static mode needs no keys. Flutter keeps the team
+  code only for the current app session. The Gemini key never enters the client.
+- **Checks:** follow the exact commands below and
+  [`backend/worker/README.md`](../backend/worker/README.md). Fixtures must remain
+  deterministic and credential-free. Last full local pass: **122 tests**, analysis,
+  formatting, fixture parity and release web/Worker builds. GitHub Actions builds
+  on push/PR; it does not deploy. A push is not evidence that CI passed.
+
+### Current issues, fixes and next actions
+
+| Priority / issue | Confirmed evidence and fix | Next action / completion criterion |
+| --- | --- | --- |
+| P0: verify a real hosted AI result | Old Gemini 3.8 timed out even on a fixed `OK` ping. Flash-Lite plus bounded narrative now passes live synthetic stories; final two-chapter result took 1,691 ms. | After GitHub capacity returns, run one small real repository through `/v1/analyze` with `ai:true`; require `analysisKind:"ai"`, expected model, real commit SHA and valid source citations. Synthetic success alone is insufficient. |
+| P0: GitHub public quota | Live crawler returned `github_limit` before any Gemini call. Safe error now includes a validated reset time when GitHub supplies one. | Last observed reset: **2026-10-21 22:09:29 UTC**; this is a historical observation, not the next reset forever. Inspect the current error and wait as directed. Verify the next request before diagnosing another Gemini failure. Do not hammer requests or bypass limits. |
+| P1: validate app integration | Server URL is the Flutter default; adapter/schema and widget fixtures pass. Fresh authenticated browser/native acceptance has not been performed. | On port 8086, enter the existing team code in Server settings, enable AI, analyze a small repository, follow chapter/node evidence links and test retry/fallback. Repeat on Android; verify HTTPS and restart/session behavior. |
+| P1: test-tool advisories | Locked Vitest 4.1.11 / `@vitest/mocker` has two moderate findings; no test code is bundled in the Worker. | Make a focused tooling patch to a version addressing GHSA-qxg6-89mg-rqv8 and GHSA-xp26-3454-mjgp (audit indicated 4.1.12), commit the lockfile, rerun Node/workerd checks and audit. |
+| P1: hosted capacity and observability | Team budgets and SQLite fixtures pass; normal small static calls worked. Maximum-size hosted CPU/memory, sustained availability and sanitized logs/traces are unverified. | Benchmark within existing source/request limits on Free; design redacted diagnostics before enabling observability. Do not turn on billing to resolve a failure. |
+| P2: product backlog | Static import map, chapters, source links, zoom controls and local saved projects exist. | Prioritize automatic graph layout, monorepo sampling, Explore/shared history and eventual user accounts/abuse controls. Preserve evidence and uncertainty; import edges remain distinct from runtime data flow. |
+
+### Safe troubleshooting sequence
+
+1. Check `/health`. `aiConfigured:true` means a key is present, not that generation
+   succeeded. A 401 means the team code is wrong; a 403 can mean the browser origin
+   is denied. See the Worker runbook for exact request/response details.
+2. With the existing team code supplied privately, use the protected
+   `POST /v1/diagnostics/gemini` with `{"schemaVersion":1,"mode":"ping"}` to test
+   provider access without GitHub. Inspect `outcome`, not just HTTP 200. Use
+   `mode:"story"` to test the real prompt/schema/citation checks on synthetic files.
+   Wait at least 15 seconds between new AI jobs; every provider attempt counts
+   against the same **20/day** team budget, including diagnostic retries.
+3. Run one real repository analysis, then repeat it to confirm cached AI reuse
+   without a new provider call. The server still checks the current commit.
+   Do not remove those checks or serve expired results to hide a quota failure.
+4. If fallback occurs, distinguish provider timeout/HTTP status, invalid evidence,
+   team budget/cooldown and GitHub quota before changing code. Never print keys,
+   provider diagnostic bodies or arbitrary source content for troubleshooting.
+5. Update this current summary, known issues and the dated evidence after each
+   change. Record local checks separately from hosted acceptance and GitHub CI;
+   leave explicit next steps whenever a check is blocked or unavailable.
+
 ## Goal and scope
 
 Paste a public GitHub repository URL and receive an interactive architecture map
