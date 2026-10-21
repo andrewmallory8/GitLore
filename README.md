@@ -69,3 +69,12 @@ web target; deployment and native release builds are future work.
 
 Before finishing a change, update [docs/HANDOVER.md](docs/HANDOVER.md) with completed
 work, decisions, validation, and the next steps. Use a feature branch and PR to `main`.
+
+### Local AI demo errors
+
+With AI explanation enabled, unsuccessful AI generation displays an explicit
+fallback card above the static result. It includes a safe reason (such as Gemini
+HTTP 503, quota, configuration, connection, or timeout) and Retry AI analysis.
+Retry refreshes the analysis rather than reusing the client cache. Provider secrets
+and raw error responses are not shown. The local demo API runs on port 8087;
+server-only settings belong in ignored `backend/.env`. Restart it after changes.

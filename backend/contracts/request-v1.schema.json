@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "url": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2048
+    },
+    "ai": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "url"
+  ],
+  "additionalProperties": false
+}

@@ -1,0 +1,7 @@
+.git
+**/.env
+**/.env.*
+**/.dart_tool
+build
+coverage
+work

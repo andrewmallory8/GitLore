@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:gitlore/main.dart';
 import 'package:gitlore/models/architecture.dart';
 import 'package:gitlore/services/architecture_service.dart';
@@ -15,6 +16,7 @@ class _RecordingDemo extends DemoArchitectureService {
 }
 
 void main() {
+  setUp(() => SharedPreferences.setMockInitialValues({}));
   testWidgets('reuses results and refreshes the displayed repository', (
     tester,
   ) async {

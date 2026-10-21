@@ -356,3 +356,96 @@ This networking check does not establish that the sprint APK was rebuilt/tested.
 3. Keep AI integration deferred; GL-04 durable storage and automatic graph layout
    remain pending. Inspect Git status before starting and preserve the local
    lockfile adjustment. Do not push without explicit user authorization.
+
+
+## Local AI demo preparation — 2026-10-20
+
+User authorized Gemini free-tier integration and GL-03/GL-04 development. This
+supersedes the earlier AI deferral. Hosting remains undecided: Render was rejected
+for idle sleep; Cloudflare Workers is only a candidate pending team discussion.
+User requested testing with this machine as the server first. No push authorized.
+
+Uncommitted work adds a versioned analysis codec, Dart HTTP backend and Gemini
+narrator with evidence checks/static fallback, optional Flutter server adapter,
+and shared_preferences-backed local bookshelf. Do not mark GL-03/GL-04 complete.
+The backend constructor initialization was corrected during demo preparation.
+Existing widget tests now initialize mock preferences.
+
+Local demo: release web build served at http://127.0.0.1:8086; Dart backend binds
+127.0.0.1:8087. From repo root run
+`dart --packages=backend/.dart_tool/package_config.json backend/bin/server.dart`.
+The ignored backend/.env holds GEMINI_API_KEY; never copy it into Flutter or logs.
+At preparation time the field was empty and /health reported aiConfigured:false.
+User was asked to enter it locally; restart server after saving. Live Gemini
+verification has not happened. Enable AI explanation in the web app to use server.
+
+Validation: backend `dart test` passed all 13 tests; release web build passed.
+Whole-project analysis reported backend cross-package relative-import resolution
+errors; cleanup and full widget/CI validation remain outstanding. Keep existing
+historical handover content and append subsequent results. No commit or push made.
+
+### Gemini credential check — 2026-10-20
+
+User saved the local key; server /health now reports configured. Authenticated
+Google model listing succeeded without logging credentials. Live generation with
+gemini-2.5-flash returned 404: unavailable to new users. Changed only ignored
+backend/.env GEMINI_MODEL to gemini-3.8-flash, confirmed listed on Google's API
+pricing page with free-tier input/output. Defaults/examples still need updating
+after a successful end-to-end test. Restarted local server on port 8087.
+Express analysis still fell back to static; a minimal 3.8 Flash generation request
+returned HTTP 503 high demand. Key saving succeeded, but successful AI chapters
+remain unverified. Do not report AI integration as complete. No billing or push.
+
+### Visible AI failures — 2026-10-20
+
+Added a prominent AI explanation unavailable card when AI is enabled but the
+result is static, with the fallback warning and Retry AI analysis (cache-bypassing
+refresh). Gemini errors now distinguish HTTP 400/401/403/404/429/500/502/503/504,
+with safe actionable messages, plus timeout and HTTP-client connection failures.
+Raw provider bodies and secrets are never displayed. Extended HTTP fixture coverage
+checks each code and excludes private diagnostic text.
+Validation: all 13 backend tests passed; Flutter analysis of lib/test/tool passed;
+release web build and diff whitespace check passed. Flutter test was attempted but
+crashed again in macos_x64 CPU detection; stopped the failed run. Whole-project
+backend analyzer import issues noted above remain unresolved. Local backend restarted
+and web build refreshed. User should hard-refresh port 8086 and retry AI analysis.
+The model edit in ignored .env was already saved; review Accept is not needed for
+server execution. No push or commit.
+
+## Development handoff — 2026-10-21
+
+This append preserves all prior progress and supersedes earlier statements that
+AI generation has not been verified. The user successfully obtained an AI
+interpretation in the local demo. Most other attempts returned HTTP 503. This
+confirms an end-to-end success, not reliable availability or a proven free-tier
+cause. The safe static fallback and visible diagnostic/retry card remain essential.
+Default and example model settings now match the tested gemini-3.8-flash setting.
+
+### Next developer priority: hosted server component (GL-03)
+
+Add/finish the deployable server component for secure API key storage and API
+request/response handling. A local Dart prototype already exists in backend/;
+reuse or adapt it rather than assuming these boundaries are absent. Move secrets
+to the chosen host's environment/secret store, never Flutter or Git. Own URL/input
+validation, bounded GitHub and Gemini requests, response-schema/evidence checks,
+readable errors, access control, quota protection, and deployment configuration.
+Preserve the versioned contract and keyless static mode. Add bounded transient
+retries and assess durable caching; the prototype caches successful AI results
+only in process memory and has no automatic retries.
+
+Hosting is still a team decision. Cloudflare Workers was discussed but not chosen;
+the Dart HTTP server cannot be deployed there unchanged. Render was rejected for
+idle sleep. GL-03 requires actual hosted deployment and remains incomplete.
+GL-04 local persistence is implemented with service fixtures, but full restart/UI
+and mobile acceptance verification remains outstanding.
+
+### Delivery and validation context
+
+User explicitly authorized committing and pushing the current work-in-progress
+to feat/sprint-gl-01-04, with no merge to main. Include intentional dependency and
+plugin registration updates for shared_preferences. backend/.env stays ignored;
+backend/.env.example is credential-free. Each developer supplies their own key.
+Existing 13 backend tests and release web build passed; lib/test/tool analysis
+passed. Whole-project backend import analysis and Flutter engine test issues
+recorded above remain limitations, not passing CI. Full CI/native acceptance is
+required before merging. All historical handover entries above are retained.

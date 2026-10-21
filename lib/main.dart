@@ -1,4 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
+
+import 'services/bookshelf_service.dart';
+import 'services/preferences_shelf_storage.dart';
+import 'services/server_architecture_service.dart';
+import 'widgets/bookshelf_panel.dart';
+
 import 'package:url_launcher/url_launcher.dart';
 
 import 'services/github_architecture_service.dart';
@@ -16,7 +23,8 @@ const muted = Color(0xFF748078);
 const paper = Color(0xFFF7F8F3);
 
 class GitLoreApp extends StatelessWidget {
-  const GitLoreApp({super.key, this.service});
+  const GitLoreApp({super.key, this.service, this.bookshelf});
+  final BookshelfService? bookshelf;
   final ArchitectureService? service;
 
   @override
@@ -38,12 +46,23 @@ class GitLoreApp extends StatelessWidget {
         border: InputBorder.none,
       ),
     ),
-    home: GitLoreHome(service: service ?? GitHubArchitectureService()),
+    home: GitLoreHome(
+      service: service ?? GitHubArchitectureService(),
+      bookshelf: bookshelf ?? BookshelfService(PreferencesShelfStorage()),
+      allowServer: service == null,
+    ),
   );
 }
 
 class GitLoreHome extends StatefulWidget {
-  const GitLoreHome({super.key, required this.service});
+  const GitLoreHome({
+    super.key,
+    required this.service,
+    required this.bookshelf,
+    this.allowServer = false,
+  });
+  final BookshelfService bookshelf;
+  final bool allowServer;
   final ArchitectureService service;
   @override
   State<GitLoreHome> createState() => _GitLoreHomeState();
@@ -55,7 +74,17 @@ class _GitLoreHomeState extends State<GitLoreHome> {
     text: 'https://github.com/expressjs/express',
   );
   Architecture? _architecture;
-  final List<Architecture> _saved = [];
+  List<SavedProject> _saved = [];
+  bool _shelfLoading = true;
+  bool _saving = false;
+  String? _shelfWarning;
+  bool _useAi = false;
+  String _serverUrl = const String.fromEnvironment(
+    'GITLORE_API_URL',
+    defaultValue: '',
+  );
+  String _accessToken = '';
+
   String? _error;
   bool _loading = false;
   int _step = 0;
@@ -66,6 +95,12 @@ class _GitLoreHomeState extends State<GitLoreHome> {
   void initState() {
     super.initState();
     _analyzer = CachedArchitectureService(widget.service);
+    if (_serverUrl.isEmpty) {
+      _serverUrl = !kIsWeb && defaultTargetPlatform == TargetPlatform.android
+          ? 'http://10.0.2.2:8087'
+          : 'http://127.0.0.1:8087';
+    }
+    _loadShelf();
   }
 
   @override
@@ -117,14 +152,144 @@ class _GitLoreHomeState extends State<GitLoreHome> {
     }
   }
 
-  void _save() {
-    final architecture = _architecture!;
+  Future<void> _loadShelf() async {
+    setState(() => _shelfLoading = true);
+    final result = await widget.bookshelf.load();
+    if (!mounted) return;
     setState(() {
-      _saved.removeWhere((item) => item.repository == architecture.repository);
-      _saved.add(architecture);
+      _saved = result.projects;
+      _shelfWarning = result.warning;
+      _shelfLoading = false;
     });
-    ScaffoldMessenger.of(context)
-        .showSnackBar(const SnackBar(content: Text('Saved for this session.')));
+  }
+
+  Future<void> _shelfAction(
+    Future<List<SavedProject>> Function() action,
+    String message,
+  ) async {
+    if (_saving || _shelfLoading) return;
+    setState(() => _saving = true);
+    try {
+      final projects = await action();
+      if (!mounted) return;
+      setState(() {
+        _saved = projects;
+        _shelfWarning = null;
+      });
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(message)));
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Could not update saved projects. Storage may be full or unavailable. Retry or delete an older save.',
+            ),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _save() async {
+    final snapshot = _architecture!;
+    await _shelfAction(
+      () => widget.bookshelf.save(snapshot),
+      'Saved on this device.',
+    );
+  }
+
+  void _setAi(bool enabled) {
+    setState(() {
+      _useAi = enabled;
+      _analyzer = CachedArchitectureService(
+        enabled
+            ? ServerArchitectureService(_serverUrl, accessToken: _accessToken)
+            : widget.service,
+      );
+    });
+  }
+
+  Future<void> _configureServer() async {
+    final address = TextEditingController(text: _serverUrl);
+    final token = TextEditingController(text: _accessToken);
+    String? error;
+    final accepted = await showDialog<bool>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialog) => AlertDialog(
+          title: const Text('Analysis server'),
+          content: SizedBox(
+            width: 440,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: address,
+                  decoration: const InputDecoration(labelText: 'Server URL'),
+                ),
+                TextField(
+                  controller: token,
+                  obscureText: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Team access code (if required)',
+                  ),
+                ),
+                const Text(
+                  'Enter a team access code, never your Gemini API key. Connection settings last for this session.',
+                ),
+                if (error != null)
+                  Text(error!, style: const TextStyle(color: Colors.red)),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () {
+                final uri = Uri.tryParse(address.text.trim());
+                if (uri == null ||
+                    uri.host.isEmpty ||
+                    uri.userInfo.isNotEmpty ||
+                    uri.hasQuery ||
+                    uri.hasFragment ||
+                    (uri.path.isNotEmpty && uri.path != '/') ||
+                    (uri.scheme != 'https' &&
+                        !(uri.scheme == 'http' &&
+                            [
+                              'localhost',
+                              '127.0.0.1',
+                              '10.0.2.2',
+                            ].contains(uri.host)))) {
+                  setDialog(
+                    () => error =
+                        'Use HTTPS, or HTTP for a local development server.',
+                  );
+                  return;
+                }
+                Navigator.pop(context, true);
+              },
+              child: const Text('Use server'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (accepted == true && mounted) {
+      _serverUrl = address.text.trim();
+      _accessToken = token.text.trim();
+      _setAi(_useAi);
+    }
+    // Dialog transition may still be using its controllers; dispose next frame.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      address.dispose();
+      token.dispose();
+    });
   }
 
   @override
@@ -181,6 +346,34 @@ class _GitLoreHomeState extends State<GitLoreHome> {
                       style: TextStyle(color: muted, fontSize: 16, height: 1.7),
                     ),
                     const SizedBox(height: 28),
+                    if (widget.allowServer)
+                      Wrap(
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Switch(
+                                value: _useAi,
+                                onChanged: _loading ? null : _setAi,
+                              ),
+                              const Text('AI explanation'),
+                            ],
+                          ),
+                          TextButton(
+                            onPressed: _loading ? null : _configureServer,
+                            child: const Text('Server settings'),
+                          ),
+                        ],
+                      ),
+                    if (widget.allowServer && _useAi)
+                      const Padding(
+                        padding: EdgeInsets.only(bottom: 12),
+                        child: Text(
+                          'Selected public source excerpts are sent through your server to Gemini. AI can make mistakes. The first request may take longer while a free server wakes.',
+                          style: TextStyle(color: muted, fontSize: 12),
+                        ),
+                      ),
                     _input(),
                     if (_error != null)
                       Padding(
@@ -192,7 +385,7 @@ class _GitLoreHomeState extends State<GitLoreHome> {
                       ),
                     const SizedBox(height: 12),
                     const Text(
-                      'PUBLIC GITHUB REPOSITORIES  •  Static analysis · No API key required',
+                      'PUBLIC GITHUB REPOSITORIES  •  Source-backed map · Optional AI chapters',
                       style: TextStyle(
                         fontSize: 11,
                         color: muted,
@@ -381,9 +574,41 @@ class _GitLoreHomeState extends State<GitLoreHome> {
   Widget _result() {
     final architecture = _architecture!;
     final node = architecture.nodes.firstWhere((node) => node.id == _selected);
+    final aiFailed = _useAi && architecture.analysisKind != 'ai';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        if (aiFailed)
+          Card(
+            color: const Color(0xFFFFF0D5),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'AI explanation unavailable',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Showing the static code map and chapters instead.',
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    architecture.warnings.isEmpty
+                        ? 'No AI explanation was returned. Check Server settings and try again.'
+                        : architecture.warnings.last,
+                  ),
+                  TextButton.icon(
+                    onPressed: _loading ? null : () => _analyze(refresh: true),
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Retry AI analysis'),
+                  ),
+                ],
+              ),
+            ),
+          ),
         Wrap(
           crossAxisAlignment: WrapCrossAlignment.center,
           spacing: 16,
@@ -396,16 +621,24 @@ class _GitLoreHomeState extends State<GitLoreHome> {
             ),
             Chip(
               label: Text(
-                architecture.isLive ? 'SOURCE-BACKED' : 'DEMO FIXTURE',
+                architecture.analysisKind == 'ai'
+                    ? 'AI CHAPTERS · STATIC MAP'
+                    : architecture.isLive
+                    ? 'SOURCE-BACKED'
+                    : 'DEMO FIXTURE',
                 style: const TextStyle(fontSize: 10),
               ),
               side: BorderSide.none,
             ),
             OutlinedButton.icon(
-              onPressed: _save,
+              onPressed: _saving || _shelfLoading ? null : _save,
               icon: const Icon(Icons.bookmark_border, size: 17),
               label: Text(
-                _saved.any((item) => item.repository == architecture.repository)
+                _saved.any(
+                      (item) =>
+                          item.architecture.repository ==
+                          architecture.repository,
+                    )
                     ? 'Saved'
                     : 'Save project',
               ),
@@ -662,6 +895,27 @@ class _GitLoreHomeState extends State<GitLoreHome> {
                       height: 1.7,
                     ),
                   ),
+                  if (architecture.analysisKind == 'ai') ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      'AI interpretation · ${architecture.model}',
+                      style: const TextStyle(fontSize: 12, color: muted),
+                    ),
+                    for (final evidence in architecture.steps[_step].evidence)
+                      TextButton(
+                        onPressed: () => _openSource(
+                          architecture
+                              .sourceUrl(evidence.path)
+                              .replace(
+                                fragment:
+                                    'L${evidence.startLine}-L${evidence.endLine}',
+                              ),
+                        ),
+                        child: Text(
+                          '${evidence.path}:${evidence.startLine}–${evidence.endLine}',
+                        ),
+                      ),
+                  ],
                   const SizedBox(height: 28),
                   Wrap(
                     alignment: WrapAlignment.spaceBetween,
@@ -757,47 +1011,24 @@ class _GitLoreHomeState extends State<GitLoreHome> {
     ),
   );
 
-  Widget _savedPage() => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 48),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Your bookshelf',
-          style: TextStyle(fontSize: 36, fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 12),
-        const Text(
-          'Projects saved during this session. Persistent storage is a next step.',
-          style: TextStyle(color: muted),
-        ),
-        const SizedBox(height: 26),
-        if (_saved.isEmpty)
-          const Text(
-            'No stories saved yet. Analyze a repository, then save your project.',
-          ),
-        ..._saved.map(
-          (item) => Card(
-            child: ListTile(
-              leading: const Icon(Icons.auto_stories_outlined, color: green),
-              title: Text(item.repository),
-              subtitle: Text(
-                item.isLive
-                    ? 'Analyzed commit ${item.commitSha!.substring(0, 7)}'
-                    : 'Demo architecture',
-              ),
-              trailing: const Icon(Icons.arrow_forward),
-              onTap: () => setState(() {
-                _architecture = item;
-                _url.text = 'https://github.com/${item.repository}';
-                _step = 0;
-                _selected = item.nodes.first.id;
-                _page = 0;
-              }),
-            ),
-          ),
-        ),
-      ],
+  Widget _savedPage() => BookshelfPanel(
+    projects: _saved,
+    loading: _shelfLoading,
+    busy: _saving,
+    warning: _shelfWarning,
+    onRetry: _loadShelf,
+    onDelete: (project) => _shelfAction(
+      () => widget.bookshelf.delete(project.architecture.repository),
+      'Saved project deleted.',
     ),
+    onClear: () => _shelfAction(widget.bookshelf.clear, 'Local saves cleared.'),
+    onOpen: (project) => setState(() {
+      final item = project.architecture;
+      _architecture = item;
+      _url.text = 'https://github.com/${item.repository}';
+      _step = 0;
+      _selected = item.nodes.first.id;
+      _page = 0;
+    }),
   );
 }
