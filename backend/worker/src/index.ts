@@ -1,6 +1,12 @@
-import { ApiError, parseRequest, type Env } from "./contracts";
+import {
+  ApiError,
+  parseRequest,
+  parseDiagnosticRequest,
+  type Env,
+} from "./contracts";
 import { failure, json, readBytes } from "./http";
 import { digest } from "./limits";
+import { DEFAULT_MODEL } from "./services/gemini";
 export { AnalysisCoordinator } from "./coordinator";
 
 async function authorized(
@@ -18,14 +24,19 @@ async function authorized(
 
 async function handle(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
-  if (!["/health", "/v1/analyze"].includes(url.pathname) || url.search)
+  if (
+    !["/health", "/v1/analyze", "/v1/diagnostics/gemini"].includes(
+      url.pathname,
+    ) ||
+    url.search
+  )
     throw new ApiError(
       404,
       "not_found",
       "Use GET /health or POST /v1/analyze.",
     );
   if (request.method === "OPTIONS") return new Response(null, { status: 204 });
-  const model = env.GEMINI_MODEL ?? "gemini-3.8-flash";
+  const model = env.GEMINI_MODEL ?? DEFAULT_MODEL;
   const configured =
     !!env.ANALYSES &&
     (env.TEAM_ACCESS_TOKEN?.length ?? 0) >= 32 &&
@@ -55,8 +66,12 @@ async function handle(request: Request, env: Env): Promise<Response> {
       "unauthorized",
       "Enter the team access code in Server settings.",
     );
-  if (request.method !== "POST" || url.pathname !== "/v1/analyze")
-    throw new ApiError(405, "method_not_allowed", "Use POST /v1/analyze.");
+  if (request.method !== "POST" || url.pathname === "/health")
+    throw new ApiError(
+      405,
+      "method_not_allowed",
+      "Use POST for analysis or diagnostics.",
+    );
   if (
     request.headers.get("content-type")?.split(";")[0].trim().toLowerCase() !==
     "application/json"
@@ -69,7 +84,11 @@ async function handle(request: Request, env: Env): Promise<Response> {
       4096,
       10000,
     );
-    input = parseRequest(
+    input = (
+      url.pathname === "/v1/diagnostics/gemini"
+        ? parseDiagnosticRequest
+        : parseRequest
+    )(
       JSON.parse(
         new TextDecoder("utf-8", { fatal: true, ignoreBOM: false }).decode(
           bytes,
@@ -87,12 +106,14 @@ async function handle(request: Request, env: Env): Promise<Response> {
     throw new ApiError(
       400,
       "invalid_request",
-      "Send schemaVersion: 1, a public GitHub repository url, and optional boolean ai.",
+      url.pathname === "/v1/diagnostics/gemini"
+        ? "Send schemaVersion: 1 and an optional ping/story mode."
+        : "Send schemaVersion: 1, a public GitHub repository url, and optional boolean ai.",
     );
   }
   const id = env.ANALYSES.idFromName("gitlore-team-v1");
   return env.ANALYSES.get(id).fetch(
-    new Request("https://coordinator/v1/analyze", {
+    new Request(`https://coordinator${url.pathname}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(input),

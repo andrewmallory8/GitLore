@@ -2,7 +2,7 @@
 
 Last updated: 2026-10-21 (America/Chicago).
 Current pass: `codex/cloudflare-worker`, based on `feat/sprint-gl-01-04` at `13e00c3`.
-See **Hosted secret verification and runtime fixes — 2026-10-21** at the end for the current setup
+See **Gemini timeout investigation and fix — 2026-10-21** at the end for the current setup
 checkpoint and **Cloudflare implementation handoff — 2026-10-21** for implementation
 decisions, verification, limitations and the next task. Dated entries preserve
 history; the newest entry supersedes older status/hosting decisions.
@@ -34,10 +34,11 @@ success was reported, alongside frequent 503 fallbacks.
 team budgets, bounded Gemini retries/evidence validation, a shared Dart package
 that fixes backend import analysis, deterministic cross-language/runtime fixtures,
 and expanded CI. The Worker is deployed with both encrypted secrets. Hosted
-authentication, CORS, static analysis and cache checks passed; real AI generation
-still falls back after provider timeouts/HTTP 503. Do not call AI acceptance complete.
+authentication, CORS, static analysis and cache checks passed. Flash-Lite now
+passes live connection and synthetic chapter/citation checks after the timeout
+fix. Fresh real-repository AI acceptance is blocked by GitHub's independent quota.
 
-**Still pending:** successful hosted Gemini output and Flutter browser/native
+**Still pending:** fresh real-repository hosted AI and Flutter browser/native
 acceptance against the server; maximum-size hosted resource checks; individual user
 accounts/public abuse controls; automatic layout, Mermaid export, Explore, shared
 history and broader mobile/restart acceptance. Static import edges are not runtime
@@ -828,3 +829,81 @@ Passed locally using Flutter 3.47.2 / Dart 3.13.2 and Node 24.15.0:
   The URL already defaults to <https://gitlore-api.jack-j-dugan.workers.dev>.
   Browser origins currently allow only localhost/127.0.0.1:8086; add a future
   hosted Flutter origin deliberately. Team code is session-only, entered at runtime.
+
+## Gemini timeout investigation and fix — 2026-10-21
+
+- User explicitly requested diagnosing and fixing Gemini timeouts, including
+  considering reduced complexity. Continued on the clean `codex/cloudflare-worker`
+  branch. Deployment remains within the ongoing authorized server-setup work.
+- Isolated provider traffic from GitHub with a protected, fixed diagnostic:
+  Gemini 3.8 Flash timed out at **20,000 ms** even when asked only to reply `OK`.
+  The identical ping with Gemini 3.5 Flash-Lite succeeded with HTTP 200 in
+  **3,021 ms**, using the same secret and server. This demonstrates that prompt
+  size is not the sole cause and key/Cloudflare connectivity work with Flash-Lite.
+  It does not establish whether the older model's delay is capacity, routing or
+  model processing. Do not invent a provider-side root cause or claim an invalid key.
+- Switched the Worker default/config to stable `gemini-3.5-flash-lite`, which
+  Google documents for low latency and offers on the free API tier:
+  <https://ai.google.dev/gemini-api/docs/models/gemini-3.5-flash-lite> and
+  <https://ai.google.dev/gemini-api/docs/pricing#gemini-3.5-flash-lite>.
+  No account plan, billing, key or OAuth permissions were changed.
+- Uses minimal thinking on 3.5/3.1 Flash-Lite, low on other Gemini 3 text models,
+  and omits unsupported thinkingLevel on older families. Removed explicit low
+  temperature for Gemini 3: Google warns it can cause loops/degraded performance.
+  The ping did not set temperature, so this is preventive tuning, not a proven
+  explanation for the original timeout. References:
+  <https://ai.google.dev/gemini-api/docs/generate-content/thinking> and
+  <https://ai.google.dev/gemini-api/docs/gemini-3#temperature>.
+- Reduced generated narrative from up to eight chapters to **one–four brief
+  chapters**, asking for at most two sentences each. Schema/parser cap chapters
+  at four; the sentence instruction is prompt guidance, not a sentence parser.
+  Preserved source input limits, 4,096-token headroom, checked citations, static
+  map, privacy boundary, 20-second attempts/45-second total and all team quotas.
+  Prompt/cache version is now `worker-story-v3`, so older results cannot mask
+  changed generation settings. Flutter and the optional Dart prototype are unchanged.
+- Added `POST /v1/diagnostics/gemini` with strict schemaVersion 1 and optional
+  `mode:"ping"|"story"`. Same authentication, origin/content-type/body limits and
+  SQLite admission/AI counters as analysis; two shared concurrency slots,
+  coalescing per mode, 15-second cooldown, 20 AI attempts/day including retries.
+  Ping makes one fixed provider call; story uses the production prompt/validator
+  on **two synthetic JS files**, not an actual crawled repository. No custom model,
+  prompt, URL or source accepted. Only safe status/timing/count metadata is returned,
+  never keys/provider bodies/source. HTTP 200 alone is insufficient: inspect
+  `outcome`. Ping reservation failure is 429; story budget failure is fallback.
+- Live synthetic story succeeded with **two checked chapters in 6,939 ms**.
+  After the final temperature/default changes, it succeeded again in **1,691 ms**.
+  These are individual diagnostic observations, not representative benchmarks or
+  an SLA. They establish live generation plus the production schema/citation
+  checks for synthetic input; real repository accuracy/latency remain unverified.
+- A separate blocker surfaced before Gemini: GitHub returned `github_limit`.
+  The crawler now includes a validated UTC reset timestamp from the public rate
+  header without echoing arbitrary header/body text. The last reported reset was
+  **2026-10-21 22:09:29 UTC / 5:09:29 p.m. America/Chicago**. Do not hammer refresh,
+  bypass quota, remove immutable-commit checks or silently serve expired snapshots.
+  Fresh GitLore/Hello-World end-to-end AI acceptance is pending that reset.
+- Final tested bundle deployed through authorized Cloudflare MCP, preserving both
+  encrypted secrets and existing SQLite namespace/migration v1. Settings confirm
+  the model and secret types. Latest etag:
+  `1efc65a5d825b35b31c9c26e14c5b9a4741c538ac9cebcf7f2ec29c0ce7d643c`.
+  Logs/traces remain disabled under the existing privacy decision; the protected
+  diagnostic provides troubleshooting without provider/source logging.
+- CI-equivalent validation passed: locked Flutter/Dart/npm restores; Dart format
+  (34 files), analysis and Worker fixture parity; **35 Flutter + 14 Dart backend
+  + 69 Worker Node + 4 workerd tests = 122 tests**; Worker formatting/types and
+  dry-run build (**45.68 KiB / 13.66 KiB gzip**); release Flutter web build with
+  successful Wasm dry run. Runtime coverage includes diagnostics through actual
+  SQLite, and fixtures cover denied access/custom input, persisted AI/admission
+  limits, deadlines, invalid evidence, excess chapters and safe reset timestamps.
+- `npm ci` now reports **two moderate development-tool findings** for Vitest
+  4.1.11 / `@vitest/mocker` (GHSA-qxg6-89mg-rqv8, GHSA-xp26-3454-mjgp), with a
+  patch indicated in 4.1.12. These are not bundled in the deployed Worker.
+  Recorded rather than applying an unrelated dependency update in this fix;
+  patch the test tooling in a focused follow-up and rerun Node/workerd suites.
+  Earlier zero-audit results above are historical, not current.
+- **Next concrete task:** after the GitHub quota reset, make one fresh small
+  repository AI request, confirm `analysisKind:"ai"`, checked source links and
+  subsequent cache reuse through the Dart adapter; then verify Flutter browser
+  behavior on port 8086 and Android. If the shared unauthenticated GitHub quota
+  remains unreliable, plan improved server GitHub capacity/caching separately.
+  No hosted large-tree benchmark, real browser/native walkthrough, remote GitHub
+  CI, push or merge was performed in this checkpoint.

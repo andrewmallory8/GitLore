@@ -52,6 +52,100 @@ function request(
     body: JSON.stringify(body),
   });
 }
+
+function diagnostic(body: unknown = { schemaVersion: 1 }, access = token) {
+  return new Request("https://api.example/v1/diagnostics/gemini", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${access}`,
+    },
+    body: JSON.stringify(body),
+  });
+}
+
+it("protects fixed diagnostics and shares persistent AI cooldown without GitHub", async () => {
+  const { env, storage, restart } = environment();
+  env.GEMINI_API_KEY = "fixture-secret";
+  const fetcher = vi.fn<typeof fetch>(async (url) => {
+    expect(String(url)).toContain("generativelanguage.googleapis.com");
+    return Response.json({
+      candidates: [
+        { finishReason: "STOP", content: { parts: [{ text: "OK" }] } },
+      ],
+    });
+  });
+  vi.stubGlobal("fetch", fetcher);
+  expect((await worker.fetch(diagnostic(undefined, "wrong"), env)).status).toBe(
+    401,
+  );
+  expect(
+    (
+      await worker.fetch(
+        diagnostic({ schemaVersion: 1, prompt: "custom" }),
+        env,
+      )
+    ).status,
+  ).toBe(400);
+  expect(fetcher).not.toHaveBeenCalled();
+  const report = await worker.fetch(diagnostic(), env);
+  expect(report.status).toBe(200);
+  expect(await report.json()).toMatchObject({
+    outcome: "ok",
+    providerStatus: 200,
+  });
+  restart();
+  expect((await worker.fetch(diagnostic(), env)).status).toBe(429);
+  expect(fetcher).toHaveBeenCalledTimes(1);
+  expect(await storage.get("budget")).toMatchObject({ calls: 2, attempts: 1 });
+});
+
+it("counts diagnostics toward the daily team budget", async () => {
+  const { env, storage } = environment();
+  const now = Date.now();
+  await storage.put("budget", {
+    day: new Date(now).toISOString().slice(0, 10),
+    calls: 100,
+    attempts: 0,
+    lastAiStart: 0,
+    minute: Math.floor(now / 60000),
+    minuteCalls: 0,
+  });
+  const fetcher = vi.fn<typeof fetch>();
+  vi.stubGlobal("fetch", fetcher);
+  expect((await worker.fetch(diagnostic(), env)).status).toBe(429);
+  expect(fetcher).not.toHaveBeenCalled();
+});
+
+it("charges both story diagnostic attempts and respects the persisted daily AI limit", async () => {
+  const { env, storage } = environment();
+  env.GEMINI_API_KEY = "fixture-secret";
+  const now = Date.now();
+  await storage.put("budget", {
+    day: new Date(now).toISOString().slice(0, 10),
+    calls: 0,
+    attempts: 19,
+    lastAiStart: 0,
+    minute: Math.floor(now / 60000),
+    minuteCalls: 0,
+  });
+  const fetcher = vi.fn<typeof fetch>(
+    async () =>
+      new Response(null, { status: 503, headers: { "Retry-After": "0" } }),
+  );
+  vi.stubGlobal("fetch", fetcher);
+  const response = await worker.fetch(
+    diagnostic({ schemaVersion: 1, mode: "story" }),
+    env,
+  );
+  expect(response.status).toBe(200);
+  expect(await response.json()).toMatchObject({
+    outcome: "fallback",
+    evidenceChecked: false,
+  });
+  expect(fetcher).toHaveBeenCalledTimes(1);
+  expect(await storage.get("budget")).toMatchObject({ attempts: 20 });
+});
 it("fetches a commit-pinned result and reuses snapshots across coordinator recreation", async () => {
   const { env, restart } = environment();
   const fetcher = vi.fn<typeof fetch>(async (url) => mockGitHub(url));

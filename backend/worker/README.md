@@ -9,9 +9,11 @@ The team server is deployed at
 acceptance status; a deployed address alone does not prove AI is configured.
 
 As of 2026-10-21 both encrypted Production secrets are present and health,
-authentication, CORS, static analysis and caching passed live checks. Gemini
-generation is not yet accepted: live requests returned timeouts or HTTP 503 and
-the server returned static fallback. No key value is exposed by health checks.
+authentication, CORS, static analysis and caching passed live checks. The previous
+Gemini 3.8 model timed out even on a tiny connection check. Flash-Lite now passes
+live connection and synthetic source/citation checks. A fresh real-repository
+AI check is pending GitHub's separate public quota reset; see the handover.
+No key value is exposed by health checks or diagnostics.
 
 ## Architecture and reasons
 
@@ -46,7 +48,7 @@ Google and GitHub apply their own quotas independently of these safeguards.
 | Deadlines | GitHub 20 seconds/request, 90 total; Gemini 20 seconds/attempt within 45 total |
 | Source | Eight files; 40,000 bytes/file; 180,000 combined; 8 MB tree / 70 KB blob JSON |
 | AI input | 100 lines and 5,000 characters/file; 24,000 characters combined |
-| Gemini generation | 4,096 output tokens; low thinking for Gemini 3; prompt/cache version worker-story-v2 |
+| Gemini generation | Default gemini-3.5-flash-lite, minimal thinking; 1–4 brief chapters, 4,096 output tokens; worker-story-v3 |
 | Output | 1.5 MB; AI evidence must cite supplied lines belonging to an existing node |
 | Cache | Ten entries; ten-minute TTL; durable LRU keyed by commit, analyzer, model and prompt |
 
@@ -95,8 +97,39 @@ safe code/message. 401 means invalid team code, 403 a denied origin, 429 the tea
 budget/concurrency limit, and 503 incomplete configuration. Gemini failures
 generally return HTTP 200 with a visibly labeled static result.
 Timeout and incomplete-generation notices distinguish those cases without
-exposing provider diagnostics. Gemini 3 uses low thinking to reduce latency;
-older model families omit that setting. This does not guarantee availability.
+exposing provider diagnostics. Flash-Lite uses minimal thinking; other Gemini 3
+models use low thinking, and older families omit the setting. Gemini 3 keeps its
+default temperature, following [Google's guidance](https://ai.google.dev/gemini-api/docs/gemini-3#temperature).
+Source input limits and citation validation remain intact. This does not guarantee availability.
+
+## Isolating Gemini failures
+
+`POST /v1/diagnostics/gemini` requires the same Bearer team code, exact browser
+origin, JSON content type and bounded request body as analysis. Send:
+
+```json
+{"schemaVersion": 1, "mode": "ping"}
+```
+
+`ping` (the default) asks the configured model for a fixed `OK`. `story` runs the
+production prompt, schema and citation validator on two fixed synthetic JS files.
+Neither mode fetches GitHub or accepts a custom prompt, source, URL or model.
+Both use the same durable request/AI counters, cooldown and concurrency slots as
+normal analysis; diagnostics are not free quota checks. Story retries count too.
+
+HTTP 200 returns a report; **inspect `outcome`**, which is `ok`, `timeout`,
+`provider_error`, `incomplete`, `invalid_response` or (for story) `fallback`.
+Ping reports `providerStatus` and `durationMs`; story reports `chapters` and
+`evidenceChecked`, with a safe fallback notice if needed. No provider text,
+repository contents or credentials are returned. A successful synthetic test
+does not establish real repository availability, factual accuracy or a latency SLA.
+Denied credentials/configuration and request admission return ordinary
+401/503/429 errors. Ping also returns 429 when its AI reservation is denied;
+story follows normal analysis behavior and reports AI-budget failure as fallback.
+
+This separates provider access/latency from the crawler's independent GitHub
+quota. GitHub limit errors include a validated UTC reset time when supplied.
+Wait for that time before retrying; do not repeatedly refresh or bypass limits.
 
 ## Verification
 
@@ -153,7 +186,7 @@ Review future logging before enabling it. CI builds artifacts; it never deploys.
 
 ## Remaining limitations
 
-- Hosted provisioning, live secrets/Gemini, CPU/memory fit and public uptime are
+- Hosted real-repository Gemini acceptance, CPU/memory fit and public uptime are
   separate acceptance items. The Worker and SQLite namespace are provisioned;
   consult the latest handover for live tests. Local fixtures do not establish
   provider availability, maximum-size resource fit or public uptime.

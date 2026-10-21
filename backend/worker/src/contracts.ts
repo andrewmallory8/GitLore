@@ -51,6 +51,22 @@ export interface Env {
   ALLOWED_ORIGINS?: string;
 }
 
+export function parseDiagnosticRequest(value: unknown): {
+  schemaVersion: 1;
+  mode: "ping" | "story";
+} {
+  const input = record(value);
+  if (
+    input.schemaVersion !== 1 ||
+    Object.keys(input).some((k) => !["schemaVersion", "mode"].includes(k)) ||
+    (input.mode !== undefined &&
+      input.mode !== "ping" &&
+      input.mode !== "story")
+  )
+    throw new Error("Expected schemaVersion: 1 and optional ping/story mode");
+  return { schemaVersion: 1, mode: input.mode === "story" ? "story" : "ping" };
+}
+
 export class ApiError extends Error {
   constructor(
     public status: number,

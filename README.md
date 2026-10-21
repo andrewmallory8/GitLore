@@ -40,8 +40,10 @@ citations, durable budgets/cache, retries and static fallback. Implementation is
 tested locally and deployed at [the team server](https://gitlore-api.jack-j-dugan.workers.dev).
 See the latest [handover](docs/HANDOVER.md) for live acceptance and Gemini setup status.
 Both server secrets are configured. Hosted static analysis, authentication and
-caching passed live checks; Gemini currently falls back after provider timeouts
-or temporary service errors. Successful hosted AI output remains a pending check.
+caching passed live checks. Gemini now uses Flash-Lite with brief chapters and
+passes live connection/synthetic citation checks. Fresh real-repository AI
+verification is pending GitHub's separate public quota reset. See the handover
+and the backend's protected diagnostic endpoint for details.
 The [Dart prototype](backend/README.md)
 is still available for local experiments.
 

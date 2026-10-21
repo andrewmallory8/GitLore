@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { SELF, abortAllDurableObjects } from "cloudflare:test";
+import { SELF, env, abortAllDurableObjects } from "cloudflare:test";
 import { token, mockGitHub } from "../helpers";
 import { fetchJson } from "../../src/http";
 
@@ -52,6 +52,40 @@ it("runs health, CORS and authentication in the real Workers runtime", async () 
   expect(cors.headers.get("Access-Control-Allow-Origin")).toBe(
     "http://localhost:8086",
   );
+});
+
+it("runs protected diagnostics through the real SQLite coordinator without GitHub", async () => {
+  const runtimeEnv = env as unknown as { GEMINI_API_KEY: string };
+  const previous = runtimeEnv.GEMINI_API_KEY;
+  runtimeEnv.GEMINI_API_KEY = "fixture-only";
+  const outbound = vi.fn<typeof fetch>(async (url, init) => {
+    const request = new Request(url, init);
+    expect(request.url).toContain("generativelanguage.googleapis.com");
+    return Response.json({
+      candidates: [
+        { finishReason: "STOP", content: { parts: [{ text: "OK" }] } },
+      ],
+    });
+  });
+  vi.stubGlobal("fetch", outbound);
+  try {
+    const response = await SELF.fetch("https://worker/v1/diagnostics/gemini", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: '{"schemaVersion":1}',
+    });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      outcome: "ok",
+      providerStatus: 200,
+    });
+    expect(outbound).toHaveBeenCalledTimes(1);
+  } finally {
+    runtimeEnv.GEMINI_API_KEY = previous;
+  }
 });
 
 it("uses the actual SQLite Durable Object and caches a validated snapshot", async () => {

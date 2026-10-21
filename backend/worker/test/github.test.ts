@@ -3,6 +3,28 @@ import { GitHubCrawler } from "../src/services/github";
 import { fetchJson, readBytes } from "../src/http";
 import { mockGitHub } from "./helpers";
 
+it("reports a bounded GitHub reset time and ignores invalid upstream header text", async () => {
+  const now = Date.UTC(2026, 9, 21);
+  for (const header of [String(now / 1000 + 60), "private-invalid-header"]) {
+    const crawler = new GitHubCrawler(
+      async () =>
+        new Response("private diagnostics", {
+          status: 403,
+          headers: { "x-ratelimit-reset": header },
+        }),
+      () => now,
+    );
+    await expect(
+      crawler.snapshot("https://github.com/team/orchard"),
+    ).rejects.toMatchObject({
+      code: "github_limit",
+      message: header.startsWith("private")
+        ? expect.not.stringContaining("private")
+        : expect.stringContaining("2026-10-21T00:01:00.000Z"),
+    });
+  }
+});
+
 it("resolves a branch to a commit and reads blobs by immutable SHA", async () => {
   const fetcher = vi.fn<typeof fetch>(async (url, init) => {
     expect(init?.headers).toHaveProperty("User-Agent", "GitLore-Worker/1");

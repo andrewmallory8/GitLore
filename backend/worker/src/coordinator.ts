@@ -1,6 +1,7 @@
 import {
   ApiError,
   parseRequest,
+  parseDiagnosticRequest,
   validateAnalysis,
   type AnalyzeRequest,
   type Env,
@@ -9,7 +10,8 @@ import { failure, json } from "./http";
 import { SnapshotCache, digest, reserve } from "./limits";
 import { ANALYSIS_VERSION } from "./services/analyzer";
 import { GitHubCrawler } from "./services/github";
-import { enhance, PROMPT_VERSION } from "./services/gemini";
+import { enhance, PROMPT_VERSION, DEFAULT_MODEL } from "./services/gemini";
+import { diagnoseGemini } from "./diagnostics";
 
 /** One SQLite-backed object coordinates this small team's workload and quotas. */
 export class AnalysisCoordinator {
@@ -25,14 +27,22 @@ export class AnalysisCoordinator {
 
   async fetch(request: Request): Promise<Response> {
     try {
-      const input = parseRequest(await request.json());
+      const raw = await request.json();
+      const diagnostic =
+        new URL(request.url).pathname === "/v1/diagnostics/gemini";
+      const diagnosticInput = diagnostic
+        ? parseDiagnosticRequest(raw)
+        : undefined;
+      const input = diagnostic ? undefined : parseRequest(raw);
       if (!(await reserve(this.state.storage, "request")))
         throw new ApiError(
           429,
           "busy",
           "The team's analysis request limit was reached. Try later or use static analysis in the app.",
         );
-      const key = `${input.url.toLowerCase()}:${input.ai}`;
+      const key = input
+        ? `${input.url.toLowerCase()}:${input.ai}`
+        : `diagnostic:gemini:${diagnosticInput!.mode}`;
       let job = this.pending.get(key);
       if (!job) {
         if (this.active >= 2)
@@ -42,7 +52,9 @@ export class AnalysisCoordinator {
             "Two analyses are already running. Try again shortly.",
           );
         this.active++;
-        job = this.run(input).finally(() => {
+        job = (
+          input ? this.run(input) : this.checkProvider(diagnosticInput!.mode)
+        ).finally(() => {
           this.pending.delete(key);
           this.active--;
         });
@@ -59,11 +71,20 @@ export class AnalysisCoordinator {
       return failure(error);
     }
   }
+  private async checkProvider(mode: "ping" | "story"): Promise<string> {
+    return JSON.stringify(
+      await diagnoseGemini(mode, {
+        apiKey: this.env.GEMINI_API_KEY ?? "",
+        model: this.env.GEMINI_MODEL ?? DEFAULT_MODEL,
+        reserve: (retry) => reserve(this.state.storage, retry ? "retry" : "ai"),
+      }),
+    );
+  }
   private async run(input: AnalyzeRequest): Promise<string> {
     const crawler = new GitHubCrawler();
     // Always resolve the current commit, even when the app requests a refresh.
     const snapshot = await crawler.snapshot(input.url);
-    const model = this.env.GEMINI_MODEL ?? "gemini-3.8-flash";
+    const model = this.env.GEMINI_MODEL ?? DEFAULT_MODEL;
     const cacheKey = await digest(
       `${snapshot.repository.toLowerCase()}@${snapshot.sha}:${ANALYSIS_VERSION}:${input.ai}:${model}:${PROMPT_VERSION}`,
     );

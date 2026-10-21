@@ -58,12 +58,21 @@ export class GitHubCrawler {
           "github_empty",
           "This repository is empty. Try one with committed source files.",
         );
-      if ([403, 429].includes(r.status))
+      if ([403, 429].includes(r.status)) {
+        const reset = Number(r.headers.get("x-ratelimit-reset")) * 1000;
+        const retry =
+          Number.isFinite(reset) &&
+          reset > this.now() &&
+          reset < this.now() + 86400000
+            ? ` Try again after ${new Date(reset).toISOString()}.`
+            : " Wait before trying again.";
         throw new ApiError(
           502,
           "github_limit",
-          "GitHub denied the request or its public API limit was reached. Wait before trying again.",
+          "GitHub denied the request or its public API limit was reached." +
+            retry,
         );
+      }
       if (r.status !== 200)
         throw new ApiError(
           502,
