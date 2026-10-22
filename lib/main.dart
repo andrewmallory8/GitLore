@@ -5,6 +5,7 @@ import 'services/bookshelf_service.dart';
 import 'services/preferences_shelf_storage.dart';
 import 'services/server_architecture_service.dart';
 import 'widgets/storybook_presentation.dart';
+import 'widgets/explore_panel.dart';
 import 'widgets/bookshelf_panel.dart';
 
 import 'package:url_launcher/url_launcher.dart';
@@ -331,7 +332,18 @@ class _GitLoreHomeState extends State<GitLoreHome> {
                 children: [
                   _header(),
                   const Divider(color: Color(0xFFE0E5DC), height: 1),
-                  if (_page == 1)
+                  if (_page == 2)
+                    ExplorePanel(
+                      busy: _loading,
+                      onAnalyze: (url) {
+                        setState(() {
+                          _page = 0;
+                          _url.text = url;
+                        });
+                        _analyze(refresh: true, retryUrl: url);
+                      },
+                    )
+                  else if (_page == 1)
                     _savedPage()
                   else ...[
                     const SizedBox(height: 54),
@@ -552,6 +564,13 @@ class _GitLoreHomeState extends State<GitLoreHome> {
               ),
             ),
             const SizedBox(width: 12),
+            TextButton(
+              onPressed: () => setState(() => _page = 2),
+              child: Text(
+                'Explore',
+                style: TextStyle(color: _page == 2 ? green : muted),
+              ),
+            ),
             TextButton(
               onPressed: () => setState(() => _page = 1),
               child: Text(

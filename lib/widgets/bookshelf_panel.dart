@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../services/bookshelf_service.dart';
+import 'project_filter.dart';
 
 class BookshelfPanel extends StatelessWidget {
   const BookshelfPanel({
@@ -43,6 +44,32 @@ class BookshelfPanel extends StatelessWidget {
     if (confirmed == true) onClear();
   }
 
+  Future<void> _confirmDelete(
+    BuildContext context,
+    SavedProject project,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete saved project?'),
+        content: Text(
+          'Remove ${project.architecture.repository} from this device? The GitHub repository is unaffected.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true && context.mounted) onDelete(project);
+  }
+
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.symmetric(vertical: 48),
@@ -78,24 +105,31 @@ class BookshelfPanel extends StatelessWidget {
           const Text(
             'No stories saved yet. Analyze a repository, then save your project.',
           ),
-        for (final project in projects)
-          Card(
-            child: ListTile(
-              title: Text(project.architecture.repository),
-              subtitle: Text(
-                '${project.architecture.analysisKind == 'ai'
-                    ? 'AI chapters'
-                    : project.architecture.isLive
-                    ? 'Static analysis'
-                    : 'Demo'} · '
-                '${project.architecture.commitSha?.substring(0, 7) ?? 'fixture'}\nSaved ${project.savedAt.toLocal().toString().split('.').first}',
-              ),
-              isThreeLine: true,
-              onTap: () => onOpen(project),
-              trailing: IconButton(
-                tooltip: 'Delete ${project.architecture.repository}',
-                onPressed: busy ? null : () => onDelete(project),
-                icon: const Icon(Icons.delete_outline),
+        if (!loading && projects.isNotEmpty)
+          ProjectFilter<SavedProject>(
+            items: projects,
+            nameOf: (p) => p.architecture.repository,
+            tagsOf: (p) => p.architecture.technologies,
+            itemBuilder: (project) => Card(
+              child: ListTile(
+                title: Text(project.architecture.repository),
+                subtitle: Text(
+                  '${project.architecture.analysisKind == 'ai'
+                      ? 'AI chapters'
+                      : project.architecture.isLive
+                      ? 'Static analysis'
+                      : 'Demo'} · '
+                  '${project.architecture.commitSha?.substring(0, 7) ?? 'fixture'}\nSaved ${project.savedAt.toLocal().toString().split('.').first}',
+                ),
+                isThreeLine: true,
+                onTap: () => onOpen(project),
+                trailing: IconButton(
+                  tooltip: 'Delete ${project.architecture.repository}',
+                  onPressed: busy
+                      ? null
+                      : () => _confirmDelete(context, project),
+                  icon: const Icon(Icons.delete_outline),
+                ),
               ),
             ),
           ),

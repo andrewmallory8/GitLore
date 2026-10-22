@@ -154,3 +154,12 @@ Choose **Present storybook** on a result for a focused sequential walkthrough,
 component highlighting and source citations. AI/static/demo labels and import-map
 limitations stay visible. Presentation uses the loaded result without another AI
 request; Back returns to the workspace.
+
+### Explore and personal library
+
+Explore offers curated repository starting points with descriptions and technology
+tags. Selecting one requests a fresh analysis using the current AI setting; these
+are not precomputed demonstrations. Search and technology filters are available
+in Explore and Saved projects, with result counts and clear-filter controls.
+Individual saved-project deletion requires confirmation and affects only this
+device's saved snapshot, never the GitHub repository.

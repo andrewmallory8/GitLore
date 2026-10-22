@@ -1174,3 +1174,41 @@ Suggested next objectives, pending implementation authorization:
 Before merging, run the new widget fixtures in a working Flutter environment
 and complete native acceptance. Keep secrets in ignored local files or the
 Cloudflare secret store; no credentials belong in the commit.
+
+## Explore and bookshelf demo — 2026-10-22
+
+User reported publishing the prior checkpoint and authorized the next objectives.
+Work remains uncommitted on codex/progress-recovery-storybook. Never edit Trello.
+Added curated Explore (Express, is-number, GitLore), descriptions/technology tags,
+and explicit fresh-analysis disclosure. Selection bypasses the client cache via
+refresh, uses current AI settings, and preserves hosted quotas/cache behavior.
+Shared ProjectFilter provides case-insensitive name search (also descriptions in
+Explore), technology selection, counts, no-results guidance and clear filters.
+Saved projects use their analyzed technology metadata. Individual removal now
+requires confirmation; cancellation preserves the save.
+
+Verification: whole-project analysis, release web/Wasm build, diff whitespace
+check passed. Added an Explore filter/selection widget fixture; it has not run
+because this machine's Flutter widget engine remains blocked by the documented
+CPU detection crash. Browser check confirmed combined filters/empty/reset, fresh
+analysis from Explore, save surviving reload, and delete confirmation/cancel.
+Actual delete persistence and Android restart acceptance remain outstanding; do
+not claim full mobile completion. Demo available on port 8086. No commit, push,
+Worker deployment, or Trello modification.
+
+### Explore demo accepted and delivery authorized — 2026-10-22
+
+User tested the Explore/filter/bookshelf demo, reported "Looks great!", and
+explicitly authorized updating this handover, committing and pushing this batch
+to codex/progress-recovery-storybook. This supersedes the preceding uncommitted
+status for this batch. Preserve prior history; do not merge main or edit Trello.
+
+Delivered: curated Explore gallery with clear fresh-analysis behavior, reusable
+search/technology filters for Explore and saved projects, result counts/empty
+states, and individual-delete confirmation. README and interaction fixture are
+included. Existing analysis/build/manual browser results above apply; widget
+execution, actual delete persistence and Android restart acceptance remain open.
+Next priority is to run the new fixtures in a working Flutter environment and
+complete those device/persistence checks before merge. Export (diagram/Mermaid
+and cited Markdown walkthrough) is a potential next product objective, subject
+to user direction. No hosted Worker changes or deployment are part of this batch.
