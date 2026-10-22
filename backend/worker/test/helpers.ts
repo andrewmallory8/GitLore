@@ -4,7 +4,18 @@ import type { Analysis } from "../src/contracts";
 export const token = "fixture-only-token-with-at-least-32-characters";
 export const result = (): Analysis =>
   buildAnalysis(fixture, fixture.files, fixture.fileCount, fixture.warnings);
-export function aiBody(path = "src/index.js", endLine = 2): unknown {
+export function snapshotInput() {
+  const a = result();
+  return {
+    schemaVersion: 1,
+    url: `https://github.com/${a.repository}`,
+    commitSha: a.commitSha,
+    branch: a.branch,
+    fileCount: a.fileCount,
+    files: a.files,
+  };
+}
+export function aiBody(path = "src/index.js"): unknown {
   return {
     candidates: [
       {
@@ -17,8 +28,7 @@ export function aiBody(path = "src/index.js", endLine = 2): unknown {
                   {
                     title: "Start",
                     body: "The entry point imports a service.",
-                    nodeId: "src/index.js",
-                    evidence: [{ path, startLine: 1, endLine }],
+                    sourcePath: path,
                   },
                 ],
               }),

@@ -22,6 +22,12 @@ Future<void> main(List<String> args) async {
     );
     stdout.writeln(result.summary);
     stdout.writeln('Analysis kind: ${result.analysisKind}');
+    stdout.writeln('Model: ${result.model ?? "none"}');
+    stdout.writeln('Commit: ${result.commitSha ?? "none"}');
+    stdout.writeln(
+      'Generated: ${result.generatedAt?.toIso8601String() ?? "none"}',
+    );
+    stdout.writeln('Chapters: ${result.steps.length}');
     stdout.writeln('Technologies: ${result.technologies.join(', ')}');
     for (final file in result.files) {
       stdout.writeln('Read ${file.path} (${file.content.length} characters)');
@@ -31,6 +37,13 @@ Future<void> main(List<String> args) async {
     }
     for (final warning in result.warnings) {
       stdout.writeln('Scope: $warning');
+    }
+    if (Platform.environment['GITLORE_REQUIRE_AI'] == 'true' &&
+        result.analysisKind != 'ai') {
+      stderr.writeln(
+        'AI acceptance failed: the server returned static fallback.',
+      );
+      exitCode = 1;
     }
   } catch (error) {
     stderr.writeln(error);

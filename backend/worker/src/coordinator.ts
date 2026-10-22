@@ -12,6 +12,11 @@ import { ANALYSIS_VERSION } from "./services/analyzer";
 import { GitHubCrawler } from "./services/github";
 import { enhance, PROMPT_VERSION, DEFAULT_MODEL } from "./services/gemini";
 import { diagnoseGemini } from "./diagnostics";
+import {
+  analyzeSnapshot,
+  parseSnapshotRequest,
+  type SnapshotRequest,
+} from "./services/snapshot";
 
 /** One SQLite-backed object coordinates this small team's workload and quotas. */
 export class AnalysisCoordinator {
@@ -28,12 +33,15 @@ export class AnalysisCoordinator {
   async fetch(request: Request): Promise<Response> {
     try {
       const raw = await request.json();
-      const diagnostic =
-        new URL(request.url).pathname === "/v1/diagnostics/gemini";
+      const path = new URL(request.url).pathname;
+      const diagnostic = path === "/v1/diagnostics/gemini";
+      const suppliedSnapshot =
+        path === "/v1/explain-snapshot" ? parseSnapshotRequest(raw) : undefined;
       const diagnosticInput = diagnostic
         ? parseDiagnosticRequest(raw)
         : undefined;
-      const input = diagnostic ? undefined : parseRequest(raw);
+      const input =
+        diagnostic || suppliedSnapshot ? undefined : parseRequest(raw);
       if (!(await reserve(this.state.storage, "request")))
         throw new ApiError(
           429,
@@ -42,7 +50,9 @@ export class AnalysisCoordinator {
         );
       const key = input
         ? `${input.url.toLowerCase()}:${input.ai}`
-        : `diagnostic:gemini:${diagnosticInput!.mode}`;
+        : suppliedSnapshot
+          ? `snapshot:${await digest(JSON.stringify(suppliedSnapshot))}`
+          : `diagnostic:gemini:${diagnosticInput!.mode}`;
       let job = this.pending.get(key);
       if (!job) {
         if (this.active >= 2)
@@ -53,7 +63,11 @@ export class AnalysisCoordinator {
           );
         this.active++;
         job = (
-          input ? this.run(input) : this.checkProvider(diagnosticInput!.mode)
+          input
+            ? this.run(input)
+            : suppliedSnapshot
+              ? this.explainSnapshot(suppliedSnapshot, key)
+              : this.checkProvider(diagnosticInput!.mode)
         ).finally(() => {
           this.pending.delete(key);
           this.active--;
@@ -70,6 +84,28 @@ export class AnalysisCoordinator {
     } catch (error) {
       return failure(error);
     }
+  }
+  private async explainSnapshot(
+    input: SnapshotRequest,
+    sourceKey: string,
+  ): Promise<string> {
+    const model = this.env.GEMINI_MODEL ?? DEFAULT_MODEL;
+    // Include actual source bytes, not just a caller-provided commit SHA. Never
+    // share cache entries with server-verified crawls or different source input.
+    const key = await digest(
+      `${sourceKey}:${ANALYSIS_VERSION}:${model}:${PROMPT_VERSION}`,
+    );
+    const cached = await this.cache.get(key);
+    if (cached) return cached;
+    const analysis = validateAnalysis(analyzeSnapshot(input));
+    const result = await enhance(analysis, {
+      apiKey: this.env.GEMINI_API_KEY ?? "",
+      model,
+      reserve: (retry) => reserve(this.state.storage, retry ? "retry" : "ai"),
+    });
+    const serialized = JSON.stringify(validateAnalysis(result));
+    if (result.analysisKind === "ai") await this.cache.put(key, serialized);
+    return serialized;
   }
   private async checkProvider(mode: "ping" | "story"): Promise<string> {
     return JSON.stringify(

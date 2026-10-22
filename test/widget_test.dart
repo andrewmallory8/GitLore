@@ -15,8 +15,53 @@ class _RecordingDemo extends DemoArchitectureService {
   }
 }
 
+class _AiOverviewService implements ArchitectureService {
+  @override
+  Future<Architecture> analyze(String url) async => const Architecture(
+    repository: 'team/repo',
+    summary: 'This AI overview explains the sampled entry point.',
+    nodes: [
+      ArchitectureNode('main.js', 'Entry point', 'SOURCE', 'Source', [
+        'main.js',
+      ]),
+    ],
+    steps: [
+      StoryStep(
+        'Overview',
+        'This AI overview explains the sampled entry point.',
+        'main.js',
+        evidence: [SourceEvidence('main.js', 1, 1)],
+      ),
+    ],
+    files: [SourceFile('main.js', 'export const value = 1;')],
+    commitSha: '1234567890abcdef1234567890abcdef12345678',
+    branch: 'main',
+    fileCount: 1,
+    analysisKind: 'ai',
+    model: 'fixture-model',
+  );
+}
+
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
+  testWidgets('displays the server AI overview as the repository summary', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1440, 1300);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(GitLoreApp(service: _AiOverviewService()));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Analyze repository'));
+    await tester.tap(find.text('Analyze repository'));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('This AI overview explains the sampled entry point.'),
+      findsWidgets,
+    );
+    expect(tester.takeException(), isNull);
+  });
   testWidgets('server settings use hosted HTTPS and allow a local override', (
     tester,
   ) async {

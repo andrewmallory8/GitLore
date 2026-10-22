@@ -3,6 +3,8 @@ import worker from "../src/index";
 import { AnalysisCoordinator } from "../src/coordinator";
 import type { Env } from "../src/contracts";
 import { mockGitHub, MemoryStorage, token, aiBody } from "./helpers";
+import { snapshotInput } from "./helpers";
+import type { Budget } from "../src/limits";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -63,6 +65,79 @@ function diagnostic(body: unknown = { schemaVersion: 1 }, access = token) {
     body: JSON.stringify(body),
   });
 }
+
+function snapshotRequest(body: unknown = snapshotInput(), access = token) {
+  return new Request("https://api.example/v1/explain-snapshot", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${access}`,
+    },
+    body: JSON.stringify(body),
+  });
+}
+
+it("explains client source without GitHub and caches by source bytes, not a caller's SHA alone", async () => {
+  const { env, storage } = environment();
+  env.GEMINI_API_KEY = "fixture-secret";
+  const outbound = vi.fn<typeof fetch>(async (url) => {
+    expect(String(url)).toContain("generativelanguage.googleapis.com");
+    return Response.json(aiBody());
+  });
+  vi.stubGlobal("fetch", outbound);
+  const first = await worker.fetch(snapshotRequest(), env);
+  expect(first.status).toBe(200);
+  const body = await first.json();
+  expect(body).toMatchObject({
+    analysisKind: "ai",
+    summary: "The entry point imports a service.",
+  });
+  expect(await (await worker.fetch(snapshotRequest(), env)).json()).toEqual(
+    body,
+  );
+  expect(outbound).toHaveBeenCalledTimes(1);
+  const budget = (await storage.get<Budget>("budget"))!;
+  await storage.put("budget", { ...budget, lastAiStart: 0 });
+  const changed = snapshotInput();
+  changed.files = changed.files.map((f, i) =>
+    i === 0 ? { ...f, content: f.content + "\n// changed" } : f,
+  );
+  expect((await worker.fetch(snapshotRequest(changed), env)).status).toBe(200);
+  expect(outbound).toHaveBeenCalledTimes(2);
+  expect(await storage.get("budget")).toMatchObject({ calls: 3, attempts: 2 });
+});
+
+it("protects snapshot upload and rejects invalid sources before provider work", async () => {
+  const { env } = environment();
+  const fetcher = vi.fn<typeof fetch>();
+  vi.stubGlobal("fetch", fetcher);
+  expect(
+    (await worker.fetch(snapshotRequest(undefined, "wrong"), env)).status,
+  ).toBe(401);
+  expect(
+    (
+      await worker.fetch(
+        snapshotRequest({
+          ...snapshotInput(),
+          files: [{ path: "../x", content: "x" }],
+        }),
+        env,
+      )
+    ).status,
+  ).toBe(400);
+  expect(
+    (
+      await worker.fetch(
+        snapshotRequest({
+          ...snapshotInput(),
+          files: [{ path: "x.js", content: "x".repeat(1100000) }],
+        }),
+        env,
+      )
+    ).status,
+  ).toBe(413);
+  expect(fetcher).not.toHaveBeenCalled();
+});
 
 it("protects fixed diagnostics and shares persistent AI cooldown without GitHub", async () => {
   const { env, storage, restart } = environment();

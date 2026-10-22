@@ -39,11 +39,13 @@ provide a server-only Gemini key, team access code, bounded requests, checked
 citations, durable budgets/cache, retries and static fallback. Implementation is
 tested locally and deployed at [the team server](https://gitlore-api.jack-j-dugan.workers.dev).
 See the latest [handover](docs/HANDOVER.md) for live acceptance and Gemini setup status.
-Both server secrets are configured. Hosted static analysis, authentication and
-caching passed live checks. Gemini now uses Flash-Lite with brief chapters and
-passes live connection/synthetic citation checks. Fresh real-repository AI
-verification is pending GitHub's separate public quota reset. See the handover
-and the backend's protected diagnostic endpoint for details.
+Both server secrets are configured. Live real-repository AI summaries and chapters
+have passed through Cloudflare and the Flutter adapter, including Express and a
+JavaScript utility repository. If the server's GitHub quota is exhausted, the app
+fetches the same bounded public source itself and sends it to the authenticated
+server for AI analysis. Gemini requests and its key always stay on the server.
+Successful AI summaries reuse the first cited overview chapter; the static map
+remains available. See the handover for exact evidence and remaining limitations.
 The [Dart prototype](backend/README.md)
 is still available for local experiments.
 
@@ -54,6 +56,19 @@ secret store. For local development, change Server settings to port 8087 or use
 URL may also be set with `--dart-define=GITLORE_API_URL=...`; never use a define
 for a privileged key. Turning AI off preserves direct keyless GitHub analysis.
 Provider failures show a static fallback and retry action.
+
+For the MVP web demo, use an origin allowed by the server:
+
+```sh
+flutter run -d chrome --web-hostname=127.0.0.1 --web-port=8086
+```
+
+Enable **AI explanation**, enter the existing team code in **Server settings**,
+and analyze `https://github.com/expressjs/express`. A successful result is labeled
+AI and shows an AI-written summary plus cited chapters. Try
+`https://github.com/jonschlinkert/is-number` for a smaller code example. The team
+code must be entered again after an app restart. Free provider/API quotas can
+still cause fallback; a static result must not be presented as successful AI.
 
 Cloudflare's optional [agent setup guide](https://developers.cloudflare.com/agent-setup/prompt.md)
 connects developer tools to Cloudflare through OAuth and installs coding skills.

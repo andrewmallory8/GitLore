@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { SELF, env, abortAllDurableObjects } from "cloudflare:test";
-import { token, mockGitHub } from "../helpers";
+import { token, mockGitHub, snapshotInput, aiBody } from "../helpers";
 import { fetchJson } from "../../src/http";
 
 afterEach(() => {
@@ -116,4 +116,42 @@ it("uses the actual SQLite Durable Object and caches a validated snapshot", asyn
   await abortAllDurableObjects();
   expect(await (await analyze()).json()).toEqual(body);
   expect(outbound).toHaveBeenCalledTimes(9);
+});
+
+it("validates uploaded source and returns an AI overview through actual SQLite without GitHub", async () => {
+  // The runtime tests share the singleton's real persisted cooldown. Advance
+  // test time instead of resetting its quota state or waiting on a wall clock.
+  const clock = vi.spyOn(Date, "now").mockReturnValue(Date.now() + 16000);
+  const runtimeEnv = env as unknown as { GEMINI_API_KEY: string };
+  const previous = runtimeEnv.GEMINI_API_KEY;
+  runtimeEnv.GEMINI_API_KEY = "fixture-only";
+  const outbound = vi.fn<typeof fetch>(async (url, init) => {
+    expect(new Request(url, init).url).toContain(
+      "generativelanguage.googleapis.com",
+    );
+    return Response.json(aiBody());
+  });
+  vi.stubGlobal("fetch", outbound);
+  try {
+    const response = await SELF.fetch("https://worker/v1/explain-snapshot", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(snapshotInput()),
+    });
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as {
+      analysisKind: string;
+      summary: string;
+      warnings: string[];
+    };
+    expect(body.analysisKind, JSON.stringify(body.warnings)).toBe("ai");
+    expect(body.summary).toBe("The entry point imports a service.");
+    expect(outbound).toHaveBeenCalledTimes(1);
+  } finally {
+    runtimeEnv.GEMINI_API_KEY = previous;
+    clock.mockRestore();
+  }
 });

@@ -7,6 +7,7 @@ import {
 import { failure, json, readBytes } from "./http";
 import { digest } from "./limits";
 import { DEFAULT_MODEL } from "./services/gemini";
+import { parseSnapshotRequest } from "./services/snapshot";
 export { AnalysisCoordinator } from "./coordinator";
 
 async function authorized(
@@ -25,9 +26,12 @@ async function authorized(
 async function handle(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
   if (
-    !["/health", "/v1/analyze", "/v1/diagnostics/gemini"].includes(
-      url.pathname,
-    ) ||
+    ![
+      "/health",
+      "/v1/analyze",
+      "/v1/explain-snapshot",
+      "/v1/diagnostics/gemini",
+    ].includes(url.pathname) ||
     url.search
   )
     throw new ApiError(
@@ -77,17 +81,21 @@ async function handle(request: Request, env: Env): Promise<Response> {
     "application/json"
   )
     throw new ApiError(415, "content_type", "Send application/json.");
+  const maxRequestBytes =
+    url.pathname === "/v1/explain-snapshot" ? 1100000 : 4096;
   let input;
   try {
     const bytes = await readBytes(
       new Response(request.body, { headers: request.headers }),
-      4096,
+      maxRequestBytes,
       10000,
     );
     input = (
       url.pathname === "/v1/diagnostics/gemini"
         ? parseDiagnosticRequest
-        : parseRequest
+        : url.pathname === "/v1/explain-snapshot"
+          ? parseSnapshotRequest
+          : parseRequest
     )(
       JSON.parse(
         new TextDecoder("utf-8", { fatal: true, ignoreBOM: false }).decode(
@@ -101,7 +109,7 @@ async function handle(request: Request, env: Env): Promise<Response> {
       throw new ApiError(
         413,
         "request_too_large",
-        "Request body exceeds 4096 bytes.",
+        `Request body exceeds ${maxRequestBytes} bytes.`,
       );
     throw new ApiError(
       400,

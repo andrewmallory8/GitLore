@@ -10,6 +10,8 @@ import 'package:gitlore_core/models/architecture.dart';
 import 'package:gitlore_core/services/architecture_codec.dart';
 import 'package:gitlore_core/services/bookshelf_service.dart';
 import 'package:gitlore_core/services/server_architecture_service.dart';
+import 'package:gitlore_core/services/architecture_service.dart';
+import 'package:gitlore_core/services/github_architecture_service.dart';
 
 import '../lib/gemini_narrator.dart';
 import '../lib/analysis_server.dart';
@@ -38,6 +40,15 @@ class MemoryStorage implements ShelfStorage {
   Future<void> write(String v) async {
     if (failWrite) throw StateError('full');
     value = v;
+  }
+}
+
+class SnapshotFixtureService implements ArchitectureService {
+  int calls = 0;
+  @override
+  Future<Architecture> analyze(String url) async {
+    calls++;
+    return fixture;
   }
 }
 
@@ -70,6 +81,70 @@ http.Response aiResponse(Map<String, dynamic> c) => http.Response(
 );
 
 void main() {
+  test('server GitHub quota falls back once to a bounded client snapshot with server-only AI', () async {
+    final crawler = SnapshotFixtureService();
+    final routes = <String>[];
+    final client = MockClient((request) async {
+      routes.add(request.url.path);
+      expect(request.headers['authorization'], 'Bearer team-code');
+      if (request.url.path == '/v1/analyze') {
+        return http.Response(
+          jsonEncode({
+            'schemaVersion': 1,
+            'error': {'code': 'github_limit', 'message': 'GitHub limit'},
+          }),
+          502,
+        );
+      }
+      final body = jsonDecode(request.body) as Map<String, dynamic>;
+      expect(body.keys.toSet(), {
+        'schemaVersion',
+        'url',
+        'commitSha',
+        'branch',
+        'fileCount',
+        'files',
+      });
+      expect(body['files'], [
+        {'path': 'main.js', 'content': fixture.files.single.content},
+      ]);
+      return http.Response(jsonEncode(ArchitectureCodec.encode(fixture)), 200);
+    });
+    final service = ServerArchitectureService(
+      'https://server.example',
+      client: client,
+      accessToken: 'team-code',
+      snapshotService: crawler,
+    );
+    expect(
+      (await service.analyze('https://github.com/team/repo')).commitSha,
+      fixture.commitSha,
+    );
+    expect(routes, ['/v1/analyze', '/v1/explain-snapshot']);
+    expect(crawler.calls, 1);
+  });
+  test('invalid server credentials never trigger local crawling or snapshot upload', () async {
+    final crawler = SnapshotFixtureService();
+    final client = MockClient(
+      (_) async => http.Response(
+        jsonEncode({
+          'schemaVersion': 1,
+          'error': {'code': 'unauthorized', 'message': 'Enter the team code'},
+        }),
+        401,
+      ),
+    );
+    final service = ServerArchitectureService(
+      'https://server.example',
+      client: client,
+      snapshotService: crawler,
+    );
+    await expectLater(
+      service.analyze('https://github.com/team/repo'),
+      throwsA(isA<AnalysisException>()),
+    );
+    expect(crawler.calls, 0);
+  });
   test('versioned analysis round-trips evidence, timestamp and AI labels', () {
     final a = fixture.withNarrative(
       chapters: [

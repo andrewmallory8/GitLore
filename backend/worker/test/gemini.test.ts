@@ -97,7 +97,7 @@ it.each(["gemini-3.5-flash-lite", "gemini-3.8-flash", "gemini-2.5-flash"])(
       },
     });
     expect(output.analysisKind).toBe("ai");
-    expect(output.analysisVersion).toBe("worker-story-v3");
+    expect(output.analysisVersion).toBe("worker-story-v5");
   },
 );
 
@@ -212,7 +212,56 @@ it("returns evidence-backed chapters and sends credentials only as a header", as
   });
   expect(output.analysisKind).toBe("ai");
   expect(output.steps[0].evidence[0].startLine).toBe(1);
+  expect(output.summary).toBe("The entry point imports a service.");
+  expect(output.summary).not.toBe(result().summary);
   expect(reserve).toHaveBeenCalledWith(false);
+});
+
+it("attaches server-owned excerpt bounds and ignores invented model node IDs or ranges", async () => {
+  const source = result();
+  source.files = source.files.map((f) =>
+    f.path === "src/index.js"
+      ? {
+          ...f,
+          content: Array.from(
+            { length: 150 },
+            (_, i) => `// line ${i + 1}`,
+          ).join("\n"),
+        }
+      : f,
+  );
+  const body = aiBody() as {
+    candidates: { content: { parts: { text: string }[] } }[];
+  };
+  const chapter = JSON.parse(body.candidates[0].content.parts[0].text)
+    .chapters[0];
+  body.candidates[0].content.parts[0].text = JSON.stringify({
+    chapters: [
+      {
+        ...chapter,
+        nodeId: "invented",
+        evidence: [{ path: "private.js", startLine: 999, endLine: 999 }],
+      },
+    ],
+  });
+  const output = await enhance(source, {
+    apiKey: "fixture",
+    model: "gemini-fixture",
+    reserve: async () => true,
+    fetcher: async (_url, init) => {
+      const schema = JSON.parse(String(init?.body)).generationConfig
+        .responseSchema;
+      expect(
+        schema.properties.chapters.items.properties.sourcePath.enum,
+      ).toContain("src/index.js");
+      return Response.json(body);
+    },
+  });
+  expect(output.analysisKind).toBe("ai");
+  expect(output.steps[0]).toMatchObject({
+    nodeId: "src/index.js",
+    evidence: [{ path: "src/index.js", startLine: 1, endLine: 100 }],
+  });
 });
 it("retries a transient error once, reserving quota for both attempts", async () => {
   const fetcher = vi
@@ -253,6 +302,7 @@ it.each([400, 401, 403, 404, 429, 503])(
     });
     expect(output.analysisKind).toBe("static");
     expect(output.steps).toEqual(result().steps);
+    expect(output.summary).toBe(result().summary);
     expect(JSON.stringify(output)).not.toMatch(
       /private diagnostic|fixture-secret/,
     );
@@ -293,8 +343,8 @@ it("does not call the provider without a key or an available quota reservation",
   expect(fetcher).not.toHaveBeenCalled();
 });
 it.each([
-  aiBody("src/service.js", 1),
-  aiBody("src/index.js", 90),
+  aiBody("src/missing.js"),
+  aiBody("../outside.js"),
   { candidates: [] },
 ])(
   "rejects invalid, unrelated, or incomplete source evidence",

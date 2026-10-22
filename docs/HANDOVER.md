@@ -1,8 +1,8 @@
 # GitLore handover
 
-Last updated: 2026-10-21 (America/Chicago).
+Last updated: 2026-10-22 (America/Chicago).
 Current pass: `codex/cloudflare-worker`, based on `feat/sprint-gl-01-04` at `13e00c3`.
-See **Gemini timeout investigation and fix — 2026-10-21** at the end for the current setup
+See **MVP AI summary acceptance — 2026-10-22** at the end for the current setup
 checkpoint and **Cloudflare implementation handoff — 2026-10-21** for implementation
 decisions, verification, limitations and the next task. Dated entries preserve
 history; the newest entry supersedes older status/hosting decisions.
@@ -11,8 +11,8 @@ This is a living project status document; update it in every implementation PR.
 
 ## Start here: next contributor or AI agent
 
-This branch is `codex/cloudflare-worker`. The latest runtime fix is commit
-`4827f68`; subsequent documentation commits refine this handoff. Check out this
+This branch is `codex/cloudflare-worker`. The latest runtime behavior is described
+in the MVP acceptance entry below; inspect `git log` for its commit. Check out this
 branch to continue the server work: the default branch may not contain it yet.
 Start with `git status` and recent commits; preserve any teammate's local work,
 then fetch and fast-forward the feature branch. Do not reset or force-push to
@@ -32,13 +32,13 @@ using the older chronological entries, whose pending statuses are historical.
   local configuration and developer authorization; do not copy this machine's
   OAuth credentials. The owner supplies the existing team code privately for app
   Server settings. Never generate a replacement production code unintentionally.
-- **Runtime settings:** default `gemini-3.5-flash-lite`, prompt `worker-story-v3`;
+- **Runtime settings:** default `gemini-3.5-flash-lite`, prompt `worker-story-v5`;
   browser origins localhost/127.0.0.1 on port **8086**. Local optional server uses
   **8087**. AI is off by default; static mode needs no keys. Flutter keeps the team
   code only for the current app session. The Gemini key never enters the client.
 - **Checks:** follow the exact commands below and
   [`backend/worker/README.md`](../backend/worker/README.md). Fixtures must remain
-  deterministic and credential-free. Last full local pass: **122 tests**, analysis,
+  deterministic and credential-free. See the latest dated entry for current tests, analysis,
   formatting, fixture parity and release web/Worker builds. GitHub Actions builds
   on push/PR; it does not deploy. A push is not evidence that CI passed.
 
@@ -46,8 +46,8 @@ using the older chronological entries, whose pending statuses are historical.
 
 | Priority / issue | Confirmed evidence and fix | Next action / completion criterion |
 | --- | --- | --- |
-| P0: verify a real hosted AI result | Old Gemini 3.8 timed out even on a fixed `OK` ping. Flash-Lite plus bounded narrative now passes live synthetic stories; final two-chapter result took 1,691 ms. | After GitHub capacity returns, run one small real repository through `/v1/analyze` with `ai:true`; require `analysisKind:"ai"`, expected model, real commit SHA and valid source citations. Synthetic success alone is insufficient. |
-| P0: GitHub public quota | Live crawler returned `github_limit` before any Gemini call. Safe error now includes a validated reset time when GitHub supplies one. | Last observed reset: **2026-10-21 22:09:29 UTC**; this is a historical observation, not the next reset forever. Inspect the current error and wait as directed. Verify the next request before diagnosing another Gemini failure. Do not hammer requests or bypass limits. |
+| Done: real hosted AI result | Real Hello-World, is-number and Express results passed through the Cloudflare/Dart adapter path. The first cited overview now supplies the actual AI summary. | Repeat the manual app demo before submission; preserve safe static fallback and distinguish it from AI success. Exact commit/timestamp evidence is recorded below. |
+| Mitigated: shared GitHub quota | The server can still return `github_limit`. The updated app fetches bounded public source and uploads it to the server for AI when that happens. Express passed this path and reused its AI cache. | Use the updated app/service; a plain `/v1/analyze` caller still needs to handle limits. Keep client provenance explicit and respect client/provider quotas. Do not remove immutable-commit checks or increase limits to hide failure. |
 | P1: validate app integration | Server URL is the Flutter default; adapter/schema and widget fixtures pass. Fresh authenticated browser/native acceptance has not been performed. | On port 8086, enter the existing team code in Server settings, enable AI, analyze a small repository, follow chapter/node evidence links and test retry/fallback. Repeat on Android; verify HTTPS and restart/session behavior. |
 | P1: test-tool advisories | Locked Vitest 4.1.11 / `@vitest/mocker` has two moderate findings; no test code is bundled in the Worker. | Make a focused tooling patch to a version addressing GHSA-qxg6-89mg-rqv8 and GHSA-xp26-3454-mjgp (audit indicated 4.1.12), commit the lockfile, rerun Node/workerd checks and audit. |
 | P1: hosted capacity and observability | Team budgets and SQLite fixtures pass; normal small static calls worked. Maximum-size hosted CPU/memory, sustained availability and sanitized logs/traces are unverified. | Benchmark within existing source/request limits on Free; design redacted diagnostics before enabling observability. Do not turn on billing to resolve a failure. |
@@ -101,9 +101,10 @@ that fixes backend import analysis, deterministic cross-language/runtime fixture
 and expanded CI. The Worker is deployed with both encrypted secrets. Hosted
 authentication, CORS, static analysis and cache checks passed. Flash-Lite now
 passes live connection and synthetic chapter/citation checks after the timeout
-fix. Fresh real-repository AI acceptance is blocked by GitHub's independent quota.
+fix. Real-repository AI summaries and cache reuse now pass, including the client
+snapshot fallback when the server's GitHub quota is limited.
 
-**Still pending:** fresh real-repository hosted AI and Flutter browser/native
+**Still pending:** manual Flutter browser/native
 acceptance against the server; maximum-size hosted resource checks; individual user
 accounts/public abuse controls; automatic layout, Mermaid export, Explore, shared
 history and broader mobile/restart acceptance. Static import edges are not runtime
@@ -972,3 +973,143 @@ Passed locally using Flutter 3.47.2 / Dart 3.13.2 and Node 24.15.0:
   remains unreliable, plan improved server GitHub capacity/caching separately.
   No hosted large-tree benchmark, real browser/native walkthrough, remote GitHub
   CI, push or merge was performed in this checkpoint.
+
+## MVP AI summary acceptance — 2026-10-22
+
+### Submission scope and verified behavior
+
+The user clarified that this submission needs an **MVP**, particularly an actual
+server component that holds the Gemini key, makes the AI request and returns the
+output to the app. Comic presentation, Explore, search/export and user accounts
+are future work, not prerequisites for this MVP. Preserve keyless static mode.
+
+- Real `octocat/Hello-World` returned `analysisKind:ai` through Cloudflare and the
+  shared Dart adapter (commit `7fd1a60b01f91b314f59955a4e4d4e80d8edf11d`). This was
+  the first real-repository acceptance after the previous synthetic-only tests.
+- Real `jonschlinkert/is-number` returned an AI overview and three chapters through
+  the adapter, reading six files at commit
+  `98e8ff1da1a89f93d1397a24d7413ed15421c139`, generated
+  `2026-10-22T14:36:54.091Z` (intermediate prompt v4).
+- Final prompt **`worker-story-v5`** passed the larger default demo,
+  `expressjs/express`, at commit
+  `0dee2c52c7c873498f8ed7d8ee4ddd0a04d3ada8`: eight files, six resolved import
+  edges, **three AI chapters**, generated `2026-10-22T14:43:39.184Z`.
+  The summary described Express as a minimalist Node.js web framework.
+  A second adapter request returned the same summary and exact generation
+  timestamp, demonstrating AI cache reuse. The explicit provenance warning
+  confirms these Express results used the new client-snapshot fallback.
+- These tests exercised the same `ServerArchitectureService` and strict result
+  codec used by Flutter, with real public GitHub source and real hosted Gemini.
+  `GITLORE_REQUIRE_AI=true` made static fallback fail acceptance instead of
+  accidentally counting HTTP 200 as AI success. No real credentials, raw provider
+  bodies or full source files were printed or committed.
+- A widget fixture additionally verifies that the server's AI overview appears
+  in the repository summary. This is not a substitute for manual browser or
+  Android device acceptance, which remains a final team demo check.
+
+### Issues found, fixes and reasons
+
+1. **AI chapters previously left the top-level summary static.** The server now
+   requests the first chapter as an overview and uses its validated body as
+   `summary`. This avoids an extra AI call and an independently uncited summary.
+   AI failure still preserves the original static summary.
+2. **Shared GitHub quota remained unreliable.** Early requests returned
+   `github_limit` before Gemini despite the prior day's reset having passed.
+   `ServerArchitectureService` now handles that specific error once: its existing
+   bounded Dart crawler fetches current public source using the client's quota,
+   then uploads a snapshot to authenticated `/v1/explain-snapshot`. Other errors,
+   especially invalid credentials, do not initiate local crawling. An upload
+   failure cannot recursively trigger another upload. Direct server crawling
+   remains the normal path; no GitHub limit is bypassed or disabled.
+3. **Express still encountered a response/evidence fallback with the older
+   generation format.** The exact older failing provider output was deliberately
+   not captured. Simplified Gemini's private output to `{title,body,sourcePath}`
+   chapters, with sourcePath constrained to an enum of supplied excerpts. The
+   server chooses the known static node and attaches the exact supplied excerpt
+   range (up to 100 lines), rather than trusting generated IDs/line numbers.
+   Invalid or absent source references still fail validation. These are broad
+   supporting windows, not guaranteed pinpoint citations or verified semantics.
+   The final simplified format succeeded on Express; no claim is made that this
+   eliminates provider HTTP 503s or other future availability failures.
+4. **Client snapshots must not become trusted graphs or poison server caches.**
+   Added `backend/worker/src/services/snapshot.ts` to validate and rebuild static
+   analysis from source. It rejects extra fields/prebuilt summaries and graphs,
+   invalid public URLs/commit IDs/paths, duplicate files, more than eight files,
+   over-40,000-byte individual UTF-8 files and over-180,000-byte total source.
+   Only this new route accepts a **1,100,000-byte JSON envelope** to accommodate
+   escaping; existing analysis/diagnostic routes retain **4,096 bytes** and all
+   body deadlines remain ten seconds. All routes share durable quotas and two
+   active slots. Cache identity includes actual normalized source and metadata,
+   analyzer/model/prompt versions, and a separate domain from server crawls.
+   A claimed SHA alone cannot cause reuse for different uploaded content.
+
+### Trust, privacy and remaining limitations
+
+- Gemini key stays in Cloudflare Production secrets and is sent only by the
+  Worker to Google's API. The app knows only the runtime team code. Source
+  fallback does not move Gemini requests or its privileged key onto the client.
+- A client snapshot is untrusted input: during a GitHub outage/quota failure the
+  server cannot independently verify its claimed commit/content. The app's
+  crawler resolves a real pinned snapshot, but the API explicitly labels server
+  provenance as unverified. No crawled/uploaded source is executed. Existing
+  source links are pinned to the supplied commit; they are not server attestation.
+- A quota fallback uses two team API requests: failed server crawl plus snapshot
+  upload. Both count toward 100/day and 10/minute. Gemini attempts, including
+  retries, still share 20/day and a 15-second new-job cooldown. Client GitHub
+  quotas can also run out. Cached AI avoids another provider attempt but does
+  not exempt incoming requests or the client's fresh commit/source lookup.
+- Snapshot rebuilding intentionally omits unverified GitHub description/language
+  metadata; technology labels can be less complete than a direct server crawl.
+- Provider HTTP 503, timeouts and static fallback remain possible. Live tests
+  are individual acceptance observations, not an uptime/latency SLA. Early
+  GitLore analysis returned HTTP 503 fallback; do not describe all tested repos
+  as successful. Maximum-size hosted resource benchmarking, sanitized
+  observability, independent identities and production abuse hardening remain
+  beyond this MVP. Existing two moderate Vitest development-tool advisories are
+  unchanged and should be patched separately.
+- The optional Dart local prototype does not implement the new snapshot route;
+  the verified hosted MVP uses Cloudflare Workers. Do not replace it with that
+  prototype when following the demo instructions.
+
+### Validation and deployment
+
+- Locked Flutter/Dart/npm restores passed. Dart formatting (34 files), analyzers,
+  static Dart/Worker fixture parity, **36 Flutter + 16 Dart backend + 81 Worker
+  fixture + 5 workerd tests = 138 local tests** passed. Release Flutter web build
+  and Wasm dry run passed; Worker formatting/types and dry-run bundle passed
+  (**48.71 KiB / 14.33 KiB gzip**).
+- New fixtures cover quota-triggered client transport, denial before crawling,
+  bounded snapshot validation, source-sensitive cache identity, AI/static summary
+  behavior, server-owned evidence ranges and the visible overview. One runtime
+  test initially hit the real singleton's cooldown from a previous test; fixed
+  test-time isolation by advancing the mocked clock, without clearing budgets
+  or changing production limits. Final real SQLite tests pass.
+- Final Worker deployed within the user's ongoing server/MVP authorization.
+  Preserved `ANALYSES`, migration v1, both secret bindings and allowed origins.
+  Script etag:
+  `2b21094e223cdfc7cf34c144cfd998b189047b17f6237b60d7d9c8afcb201558`.
+- Updated README and Worker runbook with the demo, endpoint shape, byte budgets,
+  cache/provenance behavior and CLI acceptance mode. Earlier dated statuses and
+  prompt versions above are historical; this section supersedes them.
+
+### Next agent / team actions
+
+1. Use `codex/cloudflare-worker` and the updated app build. Run
+   `flutter run -d chrome --web-hostname=127.0.0.1 --web-port=8086` so browser CORS
+   matches the production allowlist. The existing Python preview on port 8086
+   may still be running on this machine; stop/reuse it deliberately before
+   starting a different server on that port. Do not run both simultaneously.
+2. Open Server settings, use the already-default hosted URL and enter the
+   existing team code privately. Enable AI explanation, analyze Express, inspect
+   the AI label/summary/chapters and open a source link. Show the import map and
+   save/reopen the result. Repeat on Android if required by the course rubric.
+3. For CLI acceptance, supply `GITLORE_API_URL`, `GITLORE_TEAM_ACCESS_TOKEN` and
+   `GITLORE_AI=true` privately at runtime; set `GITLORE_REQUIRE_AI=true` to fail on
+   static fallback. Run the existing `tool/analyze_repository.dart` with Express
+   or is-number. It prints model, commit, generation timestamp and chapter count,
+   which distinguish real AI/cache reuse from fallback. Do not use Flutter
+   defines or committed scripts for privileged values.
+4. Keep the final manual device/demo check separate from API/adapter and fixture
+   acceptance. Confirm the submission uses this branch's code; no merge has
+   been authorized. Investigate a fresh failure by its specific quota/provider
+   notice rather than reverting to the older Gemini model or removing safeguards.

@@ -8,11 +8,11 @@ The team server is deployed at
 [handover checkpoint](../../docs/HANDOVER.md) for secret configuration and live
 acceptance status; a deployed address alone does not prove AI is configured.
 
-As of 2026-10-21 both encrypted Production secrets are present and health,
-authentication, CORS, static analysis and caching passed live checks. The previous
-Gemini 3.8 model timed out even on a tiny connection check. Flash-Lite now passes
-live connection and synthetic source/citation checks. A fresh real-repository
-AI check is pending GitHub's separate public quota reset; see the handover.
+As of 2026-10-22 both encrypted Production secrets are present. Health,
+authentication, CORS and cache checks passed, as did real AI summaries/chapters
+through the Flutter adapter. Express also passed the bounded snapshot fallback
+while the server's shared GitHub quota was limited. See the handover for commits,
+timestamps and the difference between API/adapter testing and manual device testing.
 No key value is exposed by health checks or diagnostics.
 
 ## Architecture and reasons
@@ -22,6 +22,10 @@ Flutter -> Worker: CORS / team code / bounded JSON validation
         -> SQLite Durable Object: admission / current GitHub commit / cache
         -> bounded public GitHub samples -> static analysis
         -> optional Gemini chapters -> checked citations -> schema v1 -> Flutter
+
+If server GitHub quota is exhausted:
+Flutter bounded GitHub crawler -> authenticated /v1/explain-snapshot
+        -> rebuild static map -> same durable quotas/cache -> Gemini -> Flutter
 ```
 
 A lightweight Worker delegates analysis to one SQLite-backed `AnalysisCoordinator`
@@ -40,7 +44,8 @@ Google and GitHub apply their own quotas independently of these safeguards.
 | --- | --- |
 | Access | Bearer team token required, at least 32 characters, including locally |
 | Origins | Exact comma-separated browser allowlist, no wildcard |
-| Request | Schema 1; public GitHub root URL; 4,096 bytes; ten-second body deadline |
+| Request | Schema 1; public GitHub root URL; 4,096 bytes normally; ten-second body deadline |
+| Snapshot upload | /v1/explain-snapshot only: 1,100,000-byte JSON envelope; source still eight files / 40,000 bytes each / 180,000 combined |
 | Team API budget | 100/day and 10/minute; cache hits count |
 | Concurrent work | Two distinct jobs; overlapping identical calls share work |
 | Gemini budget | 20 actual attempts/day including retries; 15-second new-job cooldown |
@@ -48,14 +53,48 @@ Google and GitHub apply their own quotas independently of these safeguards.
 | Deadlines | GitHub 20 seconds/request, 90 total; Gemini 20 seconds/attempt within 45 total |
 | Source | Eight files; 40,000 bytes/file; 180,000 combined; 8 MB tree / 70 KB blob JSON |
 | AI input | 100 lines and 5,000 characters/file; 24,000 characters combined |
-| Gemini generation | Default gemini-3.5-flash-lite, minimal thinking; 1–4 brief chapters, 4,096 output tokens; worker-story-v3 |
+| Gemini generation | Default gemini-3.5-flash-lite, minimal thinking; 1–4 brief chapters, 4,096 output tokens; worker-story-v5 |
 | Output | 1.5 MB; AI evidence must cite supplied lines belonging to an existing node |
 | Cache | Ten entries; ten-minute TTL; durable LRU keyed by commit, analyzer, model and prompt |
 
 Budgets reset at midnight UTC; minute counters use clock buckets. Every lookup
-rechecks GitHub metadata/current commit, so refresh observes new commits. Provider
+rechecks GitHub metadata/current commit for server crawls, so refresh observes new commits. Provider
 failures return a labeled static fallback and are not cached as successful AI.
 Repository code is never executed. AI retains the static import graph.
+
+The model returns only chapter title/body and a sourcePath selected from the
+supplied excerpt enum. The server supplies the matching static node and exact
+excerpt range (up to 100 lines); it does not accept model-invented IDs or ranges.
+Citations identify supporting source windows, not independently verified claims.
+The first checked chapter body becomes the AI summary without a second AI call.
+
+## Client snapshot fallback
+
+`ServerArchitectureService` automatically falls back only after `/v1/analyze`
+returns the specific `github_limit` error and AI is enabled. It uses the existing
+bounded Dart crawler to resolve a current commit and source, then sends the same
+Bearer team code to `POST /v1/explain-snapshot`. Invalid credentials do not trigger
+local crawling, and an upload failure does not recurse into another upload.
+
+The JSON body contains exactly `schemaVersion:1`, `url`, `commitSha` (40 hex
+characters), `branch`, `fileCount`, and `files:[{path,content}]`. Prebuilt nodes,
+summaries, model choices and arbitrary additional fields are rejected. The server
+checks paths, unique files, UTF-8 byte limits and the total source budget, then
+rebuilds the graph itself. The larger envelope accommodates JSON escaping; it does
+not increase the source budget or the ordinary endpoint's 4 KB limit.
+
+All routes share admission/concurrency/AI budgets. During fallback the failed
+analysis request and the upload both count toward the 100/day, 10/minute request
+budget; retries still count toward 20/day Gemini attempts. Cache keys include a
+digest of all uploaded source and metadata, analyzer/model/prompt versions, and
+a distinct namespace from server crawls. Failed AI is never cached as success.
+
+Uploaded source is untrusted client input. The server cannot independently prove
+that it matches the claimed GitHub commit while GitHub is unavailable; results
+carry an explicit provenance warning. The app's crawler still pins files to a real
+commit, but caller claims alone are not a server authenticity guarantee. No code
+is executed, and Gemini credentials never enter Flutter. Client GitHub quotas
+and Gemini availability can still fail; the fallback does not bypass those limits.
 
 ## Local setup
 
