@@ -7,7 +7,9 @@ class ProjectFilter<T> extends StatefulWidget {
     required this.nameOf,
     required this.tagsOf,
     required this.itemBuilder,
+    this.grid = false,
   });
+  final bool grid;
   final List<T> items;
   final String Function(T) nameOf;
   final List<String> Function(T) tagsOf;
@@ -78,7 +80,22 @@ class _ProjectFilterState<T> extends State<ProjectFilter<T>> {
             }),
             child: const Text('Clear filters'),
           ),
-        for (final item in matches) widget.itemBuilder(item),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final columns = widget.grid
+                ? (constraints.maxWidth / 360).floor().clamp(1, 3)
+                : 1;
+            final width = (constraints.maxWidth - (columns - 1) * 16) / columns;
+            return Wrap(
+              spacing: 16,
+              runSpacing: 16,
+              children: [
+                for (final item in matches)
+                  SizedBox(width: width, child: widget.itemBuilder(item)),
+              ],
+            );
+          },
+        ),
       ],
     );
   }

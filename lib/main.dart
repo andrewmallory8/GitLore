@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import 'theme/app_theme.dart';
 
 import 'services/bookshelf_service.dart';
 import 'services/preferences_shelf_storage.dart';
 import 'services/server_architecture_service.dart';
 import 'widgets/storybook_presentation.dart';
 import 'widgets/explore_panel.dart';
+import 'widgets/export_dialog.dart';
 import 'widgets/bookshelf_panel.dart';
 
 import 'package:url_launcher/url_launcher.dart';
@@ -19,39 +23,62 @@ import 'widgets/architecture_canvas.dart';
 
 void main() => runApp(const GitLoreApp());
 
-const ink = Color(0xFF202D28);
-const green = Color(0xFF346B50);
-const muted = Color(0xFF748078);
-const paper = Color(0xFFF7F8F3);
-
-class GitLoreApp extends StatelessWidget {
+class GitLoreApp extends StatefulWidget {
   const GitLoreApp({super.key, this.service, this.bookshelf});
   final BookshelfService? bookshelf;
   final ArchitectureService? service;
+  @override
+  State<GitLoreApp> createState() => _GitLoreAppState();
+}
+
+class _GitLoreAppState extends State<GitLoreApp> {
+  ThemeMode mode = ThemeMode.system;
+  late final defaultService = GitHubArchitectureService();
+  late final defaultShelf = BookshelfService(PreferencesShelfStorage());
+  bool changed = false;
+  @override
+  void initState() {
+    super.initState();
+    _restoreTheme();
+  }
+
+  Future<void> _restoreTheme() async {
+    try {
+      final preferences = await SharedPreferences.getInstance();
+      final dark = preferences.getBool('gitlore.darkMode');
+      if (mounted && !changed && dark != null) {
+        setState(() => mode = dark ? ThemeMode.dark : ThemeMode.light);
+      }
+    } catch (_) {
+      /* Theme preference failure does not block analysis. */
+    }
+  }
+
+  Future<void> _toggleTheme(bool dark) async {
+    changed = true;
+    setState(() => mode = dark ? ThemeMode.dark : ThemeMode.light);
+    try {
+      await (await SharedPreferences.getInstance()).setBool(
+        'gitlore.darkMode',
+        dark,
+      );
+    } catch (_) {
+      /* Session theme still works. */
+    }
+  }
 
   @override
   Widget build(BuildContext context) => MaterialApp(
-    title: 'GitLore · Code tells a story',
+    title: 'GitLore · Repository intelligence',
     debugShowCheckedModeBanner: false,
-    theme: ThemeData(
-      useMaterial3: true,
-      scaffoldBackgroundColor: paper,
-      colorScheme: ColorScheme.fromSeed(
-        seedColor: green,
-        surface: Colors.white,
-      ),
-      textTheme: ThemeData.light().textTheme.apply(
-        bodyColor: ink,
-        displayColor: ink,
-      ),
-      inputDecorationTheme: const InputDecorationTheme(
-        border: InputBorder.none,
-      ),
-    ),
+    theme: gitLoreTheme(Brightness.light),
+    darkTheme: gitLoreTheme(Brightness.dark),
+    themeMode: mode,
     home: GitLoreHome(
-      service: service ?? GitHubArchitectureService(),
-      bookshelf: bookshelf ?? BookshelfService(PreferencesShelfStorage()),
-      allowServer: service == null,
+      service: widget.service ?? defaultService,
+      bookshelf: widget.bookshelf ?? defaultShelf,
+      allowServer: widget.service == null,
+      onToggleTheme: _toggleTheme,
     ),
   );
 }
@@ -62,15 +89,22 @@ class GitLoreHome extends StatefulWidget {
     required this.service,
     required this.bookshelf,
     this.allowServer = false,
+    this.onToggleTheme,
   });
   final BookshelfService bookshelf;
   final bool allowServer;
+  final ValueChanged<bool>? onToggleTheme;
   final ArchitectureService service;
   @override
   State<GitLoreHome> createState() => _GitLoreHomeState();
 }
 
 class _GitLoreHomeState extends State<GitLoreHome> {
+  ColorScheme get palette => Theme.of(context).colorScheme;
+  Color get green => palette.primary;
+  Color get muted => palette.onSurfaceVariant;
+  Color get paper => palette.surfaceContainerLow;
+  bool _graphActive = false;
   late CachedArchitectureService _analyzer;
   final _url = TextEditingController(
     text: 'https://github.com/expressjs/express',
@@ -321,17 +355,42 @@ class _GitLoreHomeState extends State<GitLoreHome> {
   @override
   Widget build(BuildContext context) => Scaffold(
     body: SafeArea(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Material(
+            color: palette.surface,
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: _pageGutter),
+              child: _header(),
+            ),
+          ),
+          Divider(height: 1, color: palette.outlineVariant),
+          Expanded(child: _workspaceBody()),
+        ],
+      ),
+    ),
+  );
+
+  double get _pageGutter =>
+      (MediaQuery.sizeOf(context).width * .035).clamp(16.0, 72.0);
+
+  Widget _workspaceBody() => SafeArea(
+    child: NotificationListener<GraphInteractionNotification>(
+      onNotification: (event) {
+        setState(() => _graphActive = event.active);
+        return true;
+      },
       child: SingleChildScrollView(
+        physics: _graphActive ? const NeverScrollableScrollPhysics() : null,
         child: Center(
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 1280),
+            constraints: const BoxConstraints(minWidth: double.infinity),
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 28),
+              padding: EdgeInsets.symmetric(horizontal: _pageGutter),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _header(),
-                  const Divider(color: Color(0xFFE0E5DC), height: 1),
                   if (_page == 2)
                     ExplorePanel(
                       busy: _loading,
@@ -346,43 +405,58 @@ class _GitLoreHomeState extends State<GitLoreHome> {
                   else if (_page == 1)
                     _savedPage()
                   else ...[
-                    const SizedBox(height: 54),
-                    const Wrap(
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.auto_stories_outlined,
-                          size: 17,
-                          color: green,
-                        ),
-                        SizedBox(width: 8),
-                        Text(
-                          'A LITTLE CONTEXT. A WHOLE NEW PERSPECTIVE.',
-                          style: TextStyle(
-                            fontSize: 11,
-                            letterSpacing: 1.6,
+                    const SizedBox(height: 32),
+                    if (_architecture == null) ...[
+                      Wrap(
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.auto_stories_outlined,
+                            size: 17,
                             color: green,
-                            fontWeight: FontWeight.w700,
                           ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 18),
-                    const Text(
-                      'Every repo has a story.\nLet’s unfold it.',
-                      style: TextStyle(
-                        fontSize: 48,
-                        height: 1.08,
-                        letterSpacing: -2,
-                        fontWeight: FontWeight.w700,
+                          const SizedBox(width: 8),
+                          Text(
+                            'YOUR CODEBASE, EXPLAINED',
+                            style: TextStyle(
+                              fontSize: 11,
+                              letterSpacing: 1.6,
+                              color: green,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
                       ),
-                    ),
-                    const SizedBox(height: 18),
-                    const Text(
-                      'Turn a GitHub repository into a visual map and a story you can follow.\nLess digging through files. More understanding how it all fits together.',
-                      style: TextStyle(color: muted, fontSize: 16, height: 1.7),
-                    ),
-                    const SizedBox(height: 28),
+                      const SizedBox(height: 18),
+                      Text(
+                        'Understand code.\nSee the bigger picture.',
+                        style: TextStyle(
+                          fontSize: MediaQuery.sizeOf(context).width < 600
+                              ? 32
+                              : 44,
+                          height: 1.08,
+                          letterSpacing: -2,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 18),
+                      Text(
+                        'Turn a GitHub repository into a visual map and a story you can follow.\nLess digging through files. More understanding how it all fits together.',
+                        style: TextStyle(
+                          color: muted,
+                          fontSize: 16,
+                          height: 1.7,
+                        ),
+                      ),
+                      const SizedBox(height: 28),
+                    ] else ...[
+                      Text(
+                        'Repository workspace',
+                        style: Theme.of(context).textTheme.headlineSmall
+                            ?.copyWith(fontWeight: FontWeight.w700),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
                     if (widget.allowServer)
                       Wrap(
                         crossAxisAlignment: WrapCrossAlignment.center,
@@ -404,8 +478,8 @@ class _GitLoreHomeState extends State<GitLoreHome> {
                         ],
                       ),
                     if (widget.allowServer && _useAi)
-                      const Padding(
-                        padding: EdgeInsets.only(bottom: 12),
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
                         child: Text(
                           'Selected public source excerpts are sent through your server to Gemini. AI can make mistakes. Generating an explanation may take a little longer.',
                           style: TextStyle(color: muted, fontSize: 12),
@@ -487,7 +561,7 @@ class _GitLoreHomeState extends State<GitLoreHome> {
                         ),
                       ),
                     const SizedBox(height: 12),
-                    const Text(
+                    Text(
                       'PUBLIC GITHUB REPOSITORIES  •  Source-backed map · Optional AI chapters',
                       style: TextStyle(
                         fontSize: 11,
@@ -496,7 +570,7 @@ class _GitLoreHomeState extends State<GitLoreHome> {
                       ),
                     ),
                     const SizedBox(height: 6),
-                    const Text(
+                    Text(
                       'Results are reused for up to 10 minutes in this session. Use Refresh analysis to check for changes.',
                       style: TextStyle(fontSize: 12, color: muted),
                     ),
@@ -504,9 +578,9 @@ class _GitLoreHomeState extends State<GitLoreHome> {
                     if (_architecture == null) _empty() else _result(),
                   ],
                   const SizedBox(height: 36),
-                  const Divider(color: Color(0xFFE0E5DC)),
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 18),
+                  Divider(color: palette.outlineVariant),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 18),
                     child: Text(
                       'GitLore  /  A new way to read code.                                      Built for curious developers.',
                       style: TextStyle(color: muted, fontSize: 12),
@@ -522,19 +596,19 @@ class _GitLoreHomeState extends State<GitLoreHome> {
   );
 
   Widget _header() => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 22),
+    padding: const EdgeInsets.symmetric(vertical: 14),
     child: Wrap(
       alignment: WrapAlignment.spaceBetween,
       crossAxisAlignment: WrapCrossAlignment.center,
       spacing: 28,
       runSpacing: 16,
       children: [
-        const Wrap(
+        Wrap(
           crossAxisAlignment: WrapCrossAlignment.center,
           children: [
             Icon(Icons.account_tree_rounded, color: green, size: 28),
-            SizedBox(width: 10),
-            Text(
+            const SizedBox(width: 10),
+            const Text(
               'GitLore',
               style: TextStyle(
                 fontWeight: FontWeight.w800,
@@ -542,20 +616,33 @@ class _GitLoreHomeState extends State<GitLoreHome> {
                 letterSpacing: -1,
               ),
             ),
-            SizedBox(width: 10),
+            const SizedBox(width: 10),
             Chip(
               label: Text(
-                'EARLY CHAPTER',
+                'REPOSITORY INTELLIGENCE',
                 style: TextStyle(fontSize: 9, color: green),
               ),
               side: BorderSide.none,
-              backgroundColor: Color(0xFFE8EEDF),
+              backgroundColor: palette.primaryContainer,
             ),
           ],
         ),
         Wrap(
           crossAxisAlignment: WrapCrossAlignment.center,
           children: [
+            IconButton(
+              tooltip: Theme.of(context).brightness == Brightness.dark
+                  ? 'Switch to light mode'
+                  : 'Switch to dark mode',
+              icon: Icon(
+                Theme.of(context).brightness == Brightness.dark
+                    ? Icons.light_mode_outlined
+                    : Icons.dark_mode_outlined,
+              ),
+              onPressed: () => widget.onToggleTheme?.call(
+                Theme.of(context).brightness != Brightness.dark,
+              ),
+            ),
             TextButton(
               onPressed: () => setState(() => _page = 0),
               child: Text(
@@ -585,12 +672,12 @@ class _GitLoreHomeState extends State<GitLoreHome> {
   );
 
   Widget _input() => Container(
-    constraints: const BoxConstraints(maxWidth: 850),
+    width: double.infinity,
     padding: const EdgeInsets.all(8),
     decoration: BoxDecoration(
-      color: Colors.white,
+      color: palette.surface,
       borderRadius: BorderRadius.circular(12),
-      border: Border.all(color: const Color(0xFFD9DFD4)),
+      border: Border.all(color: palette.outlineVariant),
       boxShadow: const [
         BoxShadow(
           color: Color(0x08000000),
@@ -607,10 +694,10 @@ class _GitLoreHomeState extends State<GitLoreHome> {
           onSubmitted: (_) {
             if (!_loading) _analyze();
           },
-          decoration: const InputDecoration(
+          decoration: InputDecoration(
             prefixIcon: Icon(Icons.link, color: muted),
             hintText: 'https://github.com/owner/repository',
-            contentPadding: EdgeInsets.symmetric(vertical: 16),
+            contentPadding: const EdgeInsets.symmetric(vertical: 16),
           ),
         );
         final button = FilledButton.icon(
@@ -628,7 +715,10 @@ class _GitLoreHomeState extends State<GitLoreHome> {
                   height: 16,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
-              : const Icon(Icons.auto_awesome, size: 17),
+              : Icon(
+                  _useAi ? Icons.auto_awesome : Icons.manage_search,
+                  size: 17,
+                ),
           label: Text(_loading ? 'Unfolding…' : 'Analyze repository'),
         );
         return constraints.maxWidth < 580
@@ -650,25 +740,25 @@ class _GitLoreHomeState extends State<GitLoreHome> {
     width: double.infinity,
     padding: const EdgeInsets.all(36),
     decoration: BoxDecoration(
-      color: const Color(0xFFEEF1E8),
+      color: palette.surfaceContainerLow,
       borderRadius: BorderRadius.circular(16),
     ),
-    child: const Column(
+    child: Column(
       children: [
         Icon(Icons.hub_outlined, size: 50, color: green),
-        SizedBox(height: 18),
-        Text(
+        const SizedBox(height: 18),
+        const Text(
           'From a codebase to the bigger picture.',
           style: TextStyle(fontSize: 22, fontWeight: FontWeight.w600),
         ),
-        SizedBox(height: 10),
+        const SizedBox(height: 10),
         Text(
           'Analyze a public repository to explore its real files, dependencies, and code tour.',
           textAlign: TextAlign.center,
           style: TextStyle(color: muted, height: 1.6),
         ),
-        SizedBox(height: 22),
-        Wrap(
+        const SizedBox(height: 22),
+        const Wrap(
           spacing: 30,
           runSpacing: 12,
           children: [
@@ -684,6 +774,9 @@ class _GitLoreHomeState extends State<GitLoreHome> {
   Widget _result() {
     final architecture = _architecture!;
     final node = architecture.nodes.firstWhere((node) => node.id == _selected);
+    final connections = architecture.edges
+        .where((edge) => edge.from == node.id || edge.to == node.id)
+        .toList();
     final aiFailed = _useAi && architecture.analysisKind != 'ai';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -708,7 +801,7 @@ class _GitLoreHomeState extends State<GitLoreHome> {
 
         if (aiFailed)
           Card(
-            color: const Color(0xFFFFF0D5),
+            color: palette.errorContainer,
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: Column(
@@ -737,12 +830,20 @@ class _GitLoreHomeState extends State<GitLoreHome> {
               ),
             ),
           ),
+        OutlinedButton.icon(
+          onPressed: () => showDialog<void>(
+            context: context,
+            builder: (_) => ExportDialog(architecture: architecture),
+          ),
+          icon: const Icon(Icons.download_outlined),
+          label: const Text('Export analysis'),
+        ),
         Wrap(
           crossAxisAlignment: WrapCrossAlignment.center,
           spacing: 16,
           runSpacing: 10,
           children: [
-            const Icon(Icons.folder_open, color: green),
+            Icon(Icons.folder_open, color: green),
             Text(
               architecture.repository,
               style: const TextStyle(fontSize: 23, fontWeight: FontWeight.w700),
@@ -779,15 +880,12 @@ class _GitLoreHomeState extends State<GitLoreHome> {
           ],
         ),
         const SizedBox(height: 8),
-        Text(
-          architecture.summary,
-          style: const TextStyle(color: muted, height: 1.6),
-        ),
+        Text(architecture.summary, style: TextStyle(color: muted, height: 1.6)),
         if (architecture.isLive) ...[
           const SizedBox(height: 12),
           Text(
             'COMMIT ${architecture.commitSha!.substring(0, 7)}  ·  ${architecture.branch}  ·  ${architecture.files.length}/${architecture.fileCount} files read',
-            style: const TextStyle(fontSize: 12, color: green),
+            style: TextStyle(fontSize: 12, color: green),
           ),
           const SizedBox(height: 10),
           Wrap(
@@ -811,7 +909,7 @@ class _GitLoreHomeState extends State<GitLoreHome> {
                       alignment: Alignment.centerLeft,
                       child: Text(
                         warning,
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: muted,
                           fontSize: 12,
                           height: 1.6,
@@ -832,7 +930,7 @@ class _GitLoreHomeState extends State<GitLoreHome> {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
+                  Text(
                     'Select a component. Reading order does not imply data flow.',
                     style: TextStyle(color: muted, fontSize: 12),
                   ),
@@ -846,7 +944,7 @@ class _GitLoreHomeState extends State<GitLoreHome> {
                   const Divider(height: 32),
                   Text(
                     node.kind,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 10,
                       letterSpacing: 1.3,
                       fontWeight: FontWeight.bold,
@@ -864,7 +962,7 @@ class _GitLoreHomeState extends State<GitLoreHome> {
                   const SizedBox(height: 8),
                   Text(
                     node.description,
-                    style: const TextStyle(height: 1.6, color: muted),
+                    style: TextStyle(height: 1.6, color: muted),
                   ),
                   const SizedBox(height: 14),
                   ...node.files.map(
@@ -921,30 +1019,30 @@ class _GitLoreHomeState extends State<GitLoreHome> {
                           architecture.isLive
                               ? 'Source excerpt · first 24 lines · pinned to analyzed commit'
                               : 'Illustrative file paths · demo only',
-                          style: const TextStyle(fontSize: 10, color: muted),
+                          style: TextStyle(fontSize: 10, color: muted),
                         ),
                       ],
                     ),
                   ),
-                  if (architecture.isLive && architecture.edges.isNotEmpty) ...[
+                  if (architecture.isLive && connections.isNotEmpty) ...[
                     const SizedBox(height: 18),
                     const Text(
                       'Observed relative imports',
                       style: TextStyle(fontWeight: FontWeight.w600),
                     ),
-                    ...architecture.edges.map(
+                    ...connections.map(
                       (edge) => Padding(
                         padding: const EdgeInsets.only(top: 8),
                         child: Text(
                           '${edge.from} → ${edge.to}',
-                          style: const TextStyle(fontSize: 12, color: green),
+                          style: TextStyle(fontSize: 12, color: green),
                         ),
                       ),
                     ),
                   ],
-                  if (architecture.isLive && architecture.edges.isEmpty)
-                    const Text(
-                      'No relative imports resolved between the sampled files. Other connections may exist.',
+                  if (architecture.isLive && connections.isEmpty)
+                    Text(
+                      'No incoming or outgoing imports resolved for this component. Other connections may exist.',
                       style: TextStyle(fontSize: 12, color: muted),
                     ),
                 ],
@@ -966,7 +1064,7 @@ class _GitLoreHomeState extends State<GitLoreHome> {
                           decoration: BoxDecoration(
                             color: index <= _step
                                 ? green
-                                : const Color(0xFFE8ECE3),
+                                : palette.outlineVariant,
                             borderRadius: BorderRadius.circular(4),
                           ),
                         ),
@@ -976,7 +1074,7 @@ class _GitLoreHomeState extends State<GitLoreHome> {
                   const SizedBox(height: 28),
                   Text(
                     'CHAPTER ${_step + 1} OF ${architecture.steps.length}',
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: green,
                       letterSpacing: 1.6,
                       fontSize: 10,
@@ -988,7 +1086,7 @@ class _GitLoreHomeState extends State<GitLoreHome> {
                     height: 110,
                     width: double.infinity,
                     decoration: BoxDecoration(
-                      color: const Color(0xFFF0F2E8),
+                      color: palette.surfaceContainerLow,
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Center(
@@ -1017,17 +1115,13 @@ class _GitLoreHomeState extends State<GitLoreHome> {
                   const SizedBox(height: 14),
                   Text(
                     architecture.steps[_step].body,
-                    style: const TextStyle(
-                      color: muted,
-                      fontSize: 15,
-                      height: 1.7,
-                    ),
+                    style: TextStyle(color: muted, fontSize: 15, height: 1.7),
                   ),
                   if (architecture.analysisKind == 'ai') ...[
                     const SizedBox(height: 12),
                     Text(
                       'AI interpretation · ${architecture.model}',
-                      style: const TextStyle(fontSize: 12, color: muted),
+                      style: TextStyle(fontSize: 12, color: muted),
                     ),
                     for (final evidence in architecture.steps[_step].evidence)
                       TextButton(
@@ -1115,9 +1209,9 @@ class _GitLoreHomeState extends State<GitLoreHome> {
     width: double.infinity,
     padding: const EdgeInsets.all(24),
     decoration: BoxDecoration(
-      color: Colors.white,
+      color: palette.surface,
       borderRadius: BorderRadius.circular(16),
-      border: Border.all(color: const Color(0xFFE0E5DC)),
+      border: Border.all(color: palette.outlineVariant),
     ),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1125,7 +1219,7 @@ class _GitLoreHomeState extends State<GitLoreHome> {
         Wrap(
           crossAxisAlignment: WrapCrossAlignment.center,
           children: [
-            Text(number, style: const TextStyle(color: muted, fontSize: 11)),
+            Text(number, style: TextStyle(color: muted, fontSize: 11)),
             const SizedBox(width: 10),
             Text(
               title,

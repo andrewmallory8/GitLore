@@ -1212,3 +1212,111 @@ Next priority is to run the new fixtures in a working Flutter environment and
 complete those device/persistence checks before merge. Export (diagram/Mermaid
 and cited Markdown walkthrough) is a potential next product objective, subject
 to user direction. No hosted Worker changes or deployment are part of this batch.
+
+## Visual redesign demo — 2026-10-22
+
+User authorized a visual overhaul, dark mode, a non-AI Analyze icon, and graph
+gesture isolation. Work remains local on codex/progress-recovery-storybook; no
+commit/push until user demo approval. Trello must never be changed.
+
+Added central light/dark slate-and-blue theme, themed surfaces/inputs/cards/chips,
+fixed top navigation and responsive typography. Result mode has a compact workspace
+heading instead of the landing hero. Theme toggle is in navigation, starts from
+system preference, persists locally via shared_preferences, and preserves the
+active service/result. Analyze uses a search icon in static mode and sparkle only
+when AI is enabled. Graph nodes/background/edges now match the palette.
+
+GraphInteractionNotification disables the surrounding scroll view while a mouse
+is over the graph or touch pointers are active, with cancel/up/exit handling.
+Pointer-signal resolution consumes graph wheel events; InteractiveViewer retains
+zoom/pan. Both workspace and presentation participate.
+
+Browser checks: light/dark screenshots inspected, saved snapshot reopened, theme
+switch preserved current analysis, and wheel over graph zoomed without moving
+page position. Full Android touch and narrow-screen acceptance remain pending.
+Added theme/static-icon widget fixture; native widget execution remains blocked
+by the previously documented local Flutter CPU detection crash. No hosted API
+change or deployment. Review final build and analysis results before delivery.
+
+### Responsive layout refinements — 2026-10-22
+
+Following the visual demo, the header surface now stretches across the window;
+workspace and header share proportional gutters (3.5%, bounded at 16–72px).
+Removed the fixed desktop content/input width caps. Explore uses a responsive
+one-to-three-column gallery; saved cards fill their available width. Graph height
+tracks viewport height within readable bounds. Text and touch targets retain
+usable sizes rather than scaling every dimension by percentage.
+
+Dot grid is painted in viewport coordinates with transform-aware offsets, behind
+the interactive scene, so it covers the graph even beyond node bounds when panning.
+Static analysis passed. Widget execution remains subject to the previously
+recorded local engine crash; mobile acceptance remains pending. No commit/push.
+Release web build (including Wasm dry run) and diff whitespace check passed.
+Reloaded browser demo and inspected Explore: full-width header, aligned gutters,
+and two-column gallery at the preview window width render correctly.
+
+
+### README accuracy audit — 2026-10-22
+
+User reported that an AI interpretation called GitLore LLM-free. Audited README
+against Flutter mode selection, crawler/cache, Worker Gemini implementation,
+platform permissions, and CI. Moved explicit static-vs-optional-Gemini behavior
+into the opening paragraphs and scoped the static pipeline description to AI off.
+Clarified citation validation does not prove generated claims, fallback versus
+request failures, client cache staleness/fallback reuse, historical deployment
+evidence, and platform acceptance limits. Updated stale team milestones and
+distinguished existing manual Worker deployment from absent automated deployment.
+Removed unrelated optional Cloudflare developer-tool setup from the app README.
+
+Documentation only in this batch; inspected implementation and diff, no runtime
+code changes or new build/tests. Earlier UI changes remain uncommitted. Android
+debug APK was built/installed and launched on Pixel 10 Pro in the preceding turn;
+DNS resolved after emulator restart. Full mobile acceptance remains user-driven.
+These README edits are local: GitHub analysis reads the remote default branch,
+not this working tree. Publishing/merging and refreshing are separate actions;
+do not commit, push, merge, or deploy without authorization.
+
+### Export and selected-component connections — 2026-10-22
+
+User accepted general mobile behavior and requested export plus connection filtering.
+Added pure Dart ArchitectureExport (Mermaid and Markdown), an export preview dialog,
+clipboard action, and share_plus file delivery. Markdown includes the map, snapshot
+metadata, pinned AI citations or clearly labeled related source files, and warnings.
+Demo exports do not invent pinned references. Mermaid uses generated node IDs and
+numeric label entities to prevent source text becoming syntax; dangling edges omitted.
+Standalone Mermaid retains source links and limitations in comments. No network/AI
+calls for export. Added share_plus, its locked dependencies and required generated
+platform registrants. Native sharing destinations vary; copy is the fallback.
+Selected component details now filter edges by either endpoint and show a scoped
+empty state, preserving the full graph.
+
+Validation: Flutter analysis passed; 20 Dart backend tests passed including 3 new
+export fixtures (escaping, references, demo provenance). Web/Wasm build and Android
+debug build passed; APK installed and launched in the existing emulator. Browser
+export dialog inspected with saved snapshot. Native widget engine limitation from
+previous entries remains; file destination/round-trip rendering and final mobile
+export acceptance are pending user test. README updated. No commit/push/deployment.
+User will authorize commit/push after final demo and handle main merge themselves.
+
+### Final demo accepted; development delivery authorized — 2026-10-22
+
+User reported "Everything looks great!" after the export/mobile demo and explicitly
+authorized this handover update, commit, and push to codex/progress-recovery-storybook.
+This supersedes the preceding pending-demo/no-commit status for the current batch.
+Preserve all earlier history. User will handle merging main; do not merge or deploy.
+
+Delivery includes slate/blue light and dark themes with persisted preference,
+responsive full-width navigation and gallery, viewport-filling graph dots and
+isolated graph gestures, static/AI button icons, README accuracy corrections,
+Mermaid/Markdown export with preview/copy/file delivery, and component-scoped
+import connections. share_plus and required platform registrants/lockfile are
+intentional dependency changes. No provider credentials belong in this commit.
+
+Validation remains as recorded above: locked restore, format, analysis, 20 Dart
+backend tests, release web/Wasm and Android debug builds passed; browser preview
+and user mobile/final demos accepted. Native Flutter widget test execution on this
+machine remains blocked by the previously documented CPU detection issue. User
+acceptance does not imply every export destination/platform has been tested.
+Next: verify development-branch CI, especially widget tests, before user merges;
+exercise exported Mermaid/Markdown in the team's chosen documentation tools.
+No Trello cards changed. No Worker deployment or main merge is included.

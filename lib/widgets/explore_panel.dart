@@ -47,6 +47,7 @@ class ExplorePanel extends StatelessWidget {
         const SizedBox(height: 16),
         ProjectFilter<ExploreProject>(
           items: exploreProjects,
+          grid: true,
           nameOf: (p) => '${p.repository} ${p.description}',
           tagsOf: (p) => p.tags,
           itemBuilder: (p) => Card(

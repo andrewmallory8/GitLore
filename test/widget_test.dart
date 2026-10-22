@@ -52,6 +52,27 @@ class _AiOverviewService implements ArchitectureService {
 }
 
 void main() {
+  testWidgets('theme toggles and static analyze has no sparkle', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({'gitlore.darkMode': false});
+    await tester.pumpWidget(GitLoreApp(service: DemoArchitectureService()));
+    await tester.pumpAndSettle();
+    final button = find.widgetWithText(FilledButton, 'Analyze repository');
+    expect(
+      find.descendant(of: button, matching: find.byIcon(Icons.auto_awesome)),
+      findsNothing,
+    );
+    await tester.tap(find.byTooltip('Switch to dark mode'));
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<MaterialApp>(find.byType(MaterialApp)).themeMode,
+      ThemeMode.dark,
+    );
+    expect(find.byTooltip('Switch to light mode'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('loading is visible and failed refresh retains prior result', (
     tester,
   ) async {

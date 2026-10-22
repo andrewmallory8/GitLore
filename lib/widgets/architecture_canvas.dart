@@ -1,8 +1,14 @@
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
-
 import '../models/architecture.dart';
+
+import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
+
+class GraphInteractionNotification extends Notification {
+  GraphInteractionNotification(this.active);
+  final bool active;
+}
 
 /// File nodes with directed, literal import references. Unconnected nodes remain
 /// visible; vertical ordering does not imply a relationship.
@@ -27,6 +33,11 @@ class _ArchitectureCanvasState extends State<ArchitectureCanvas> {
   final _transform = TransformationController();
   Size _viewport = Size.zero;
   Size _scene = Size.zero;
+  bool _hover = false;
+  final Set<int> _pointers = {};
+  void _notifyInteraction() =>
+      GraphInteractionNotification(_hover || _pointers.isNotEmpty)
+          .dispatch(context);
   List<ArchitectureNode> get nodes => widget.nodes;
   List<ArchitectureEdge> get edges => widget.edges;
   String get selected => widget.selected;
@@ -82,6 +93,7 @@ class _ArchitectureCanvasState extends State<ArchitectureCanvas> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     final ids = nodes.map((node) => node.id).toSet();
     final seen = <(String, String)>{};
     final connections = edges
@@ -104,7 +116,7 @@ class _ArchitectureCanvasState extends State<ArchitectureCanvas> {
           connections.isEmpty
               ? 'No import connections found between these nodes.'
               : 'Arrows point from importing file to imported file. Drag to pan. Pinch to zoom.',
-          style: const TextStyle(fontSize: 11, color: Color(0xFF748078)),
+          style: TextStyle(fontSize: 11, color: colors.onSurfaceVariant),
         ),
         Wrap(
           children: [
@@ -131,10 +143,10 @@ class _ArchitectureCanvasState extends State<ArchitectureCanvas> {
         ),
         const SizedBox(height: 10),
         Container(
-          height: 340,
+          height: (MediaQuery.sizeOf(context).height * .52).clamp(300.0, 640.0),
           clipBehavior: Clip.antiAlias,
           decoration: BoxDecoration(
-            color: const Color(0xFFF8F9F5),
+            color: colors.surfaceContainerLow,
             borderRadius: BorderRadius.circular(12),
           ),
           child: LayoutBuilder(
@@ -143,105 +155,153 @@ class _ArchitectureCanvasState extends State<ArchitectureCanvas> {
                 constraints.maxWidth,
                 connections.isEmpty ? 290.0 : 355.0 + connections.length * 84,
               );
-              final height = math.max(340.0, nodes.length * 100.0 + 20);
-              _viewport = Size(constraints.maxWidth, 340);
+              final height = math.max(
+                constraints.maxHeight,
+                nodes.length * 100.0 + 20,
+              );
+              _viewport = constraints.biggest;
               _scene = Size(width, height);
-              return InteractiveViewer(
-                key: const ValueKey('architecture-viewport'),
-                transformationController: _transform,
-                constrained: false,
-                minScale: math.min(.05, _fitScale),
-                maxScale: 4,
-                boundaryMargin: const EdgeInsets.all(340),
-                child: SizedBox(
-                  width: width,
-                  height: height,
-                  child: CustomPaint(
-                    painter: ImportConnectionsPainter(
-                      connections: connections,
-                      positions: positions,
-                      selected: selected,
-                    ),
-                    child: Stack(
-                      children: [
-                        for (final node in nodes)
-                          Positioned.fromRect(
-                            rect: positions[node.id]!,
-                            child: Semantics(
-                              selected: node.id == selected,
-                              child: Tooltip(
-                                message: node.files.isEmpty
-                                    ? node.label
-                                    : node.files.join(', '),
-                                child: OutlinedButton.icon(
-                                  onPressed: () => onSelect(node.id),
-                                  style: OutlinedButton.styleFrom(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                    ),
-                                    backgroundColor: node.id == selected
-                                        ? const Color(0xFFE5EEDC)
-                                        : Colors.white,
-                                    foregroundColor: const Color(0xFF346B50),
-                                    side: BorderSide(
-                                      color: node.id == selected
-                                          ? const Color(0xFF346B50)
-                                          : const Color(0xFFD7DFD0),
-                                      width: node.id == selected ? 2 : 1,
-                                    ),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                  ),
-                                  icon: const Icon(Icons.code, size: 17),
-                                  label: Text(
-                                    node.label,
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                              ),
-                            ),
+              return CustomPaint(
+                painter: ViewportGridPainter(_transform, colors.outlineVariant),
+                child: MouseRegion(
+                  onEnter: (_) {
+                    _hover = true;
+                    _notifyInteraction();
+                  },
+                  onExit: (_) {
+                    _hover = false;
+                    _notifyInteraction();
+                  },
+                  child: Listener(
+                    onPointerDown: (e) {
+                      _pointers.add(e.pointer);
+                      _notifyInteraction();
+                    },
+                    onPointerUp: (e) {
+                      _pointers.remove(e.pointer);
+                      _notifyInteraction();
+                    },
+                    onPointerCancel: (e) {
+                      _pointers.remove(e.pointer);
+                      _notifyInteraction();
+                    },
+                    onPointerSignal: (e) {
+                      if (e is PointerScrollEvent) {
+                        GestureBinding.instance.pointerSignalResolver.register(
+                          e,
+                          (_) {},
+                        );
+                      }
+                    },
+                    child: InteractiveViewer(
+                      key: const ValueKey('architecture-viewport'),
+                      transformationController: _transform,
+                      constrained: false,
+                      minScale: math.min(.05, _fitScale),
+                      maxScale: 4,
+                      boundaryMargin: const EdgeInsets.all(340),
+                      child: SizedBox(
+                        width: width,
+                        height: height,
+                        child: CustomPaint(
+                          painter: ImportConnectionsPainter(
+                            connections: connections,
+                            positions: positions,
+                            selected: selected,
                           ),
-                        for (var index = 0; index < connections.length; index++)
-                          Positioned(
-                            left: 270 + .75 * (60 + index * 84) - 28,
-                            top:
-                                (positions[connections[index].from]!.center.dy +
-                                        positions[connections[index].to]!
-                                            .center
-                                            .dy) /
-                                    2 -
-                                11,
-                            child: Semantics(
-                              label:
-                                  '${connections[index].from} imports ${connections[index].to}',
-                              child: Tooltip(
-                                message:
-                                    '${connections[index].from} → ${connections[index].to}',
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 5,
-                                    vertical: 3,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFFF8F9F5),
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                  child: const ExcludeSemantics(
-                                    child: Text(
-                                      'imports',
-                                      style: TextStyle(
-                                        fontSize: 10,
-                                        color: Color(0xFF346B50),
+                          child: Stack(
+                            children: [
+                              for (final node in nodes)
+                                Positioned.fromRect(
+                                  rect: positions[node.id]!,
+                                  child: Semantics(
+                                    selected: node.id == selected,
+                                    child: Tooltip(
+                                      message: node.files.isEmpty
+                                          ? node.label
+                                          : node.files.join(', '),
+                                      child: OutlinedButton.icon(
+                                        onPressed: () => onSelect(node.id),
+                                        style: OutlinedButton.styleFrom(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 12,
+                                          ),
+                                          backgroundColor: node.id == selected
+                                              ? colors.primaryContainer
+                                              : colors.surface,
+                                          foregroundColor: colors.onSurface,
+                                          side: BorderSide(
+                                            color: node.id == selected
+                                                ? colors.primary
+                                                : colors.outlineVariant,
+                                            width: node.id == selected ? 2 : 1,
+                                          ),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(
+                                              8,
+                                            ),
+                                          ),
+                                        ),
+                                        icon: const Icon(Icons.code, size: 17),
+                                        label: Text(
+                                          node.label,
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
                                       ),
                                     ),
                                   ),
                                 ),
-                              ),
-                            ),
+                              for (
+                                var index = 0;
+                                index < connections.length;
+                                index++
+                              )
+                                Positioned(
+                                  left: 270 + .75 * (60 + index * 84) - 28,
+                                  top:
+                                      (positions[connections[index].from]!
+                                                  .center
+                                                  .dy +
+                                              positions[connections[index].to]!
+                                                  .center
+                                                  .dy) /
+                                          2 -
+                                      11,
+                                  child: Semantics(
+                                    label:
+                                        '${connections[index].from} imports ${connections[index].to}',
+                                    child: Tooltip(
+                                      message:
+                                          '${connections[index].from} → ${connections[index].to}',
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 5,
+                                          vertical: 3,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: colors.surfaceContainerLow,
+                                          borderRadius: BorderRadius.circular(
+                                            4,
+                                          ),
+                                        ),
+                                        child: const ExcludeSemantics(
+                                          child: Text(
+                                            'imports',
+                                            style: TextStyle(
+                                              fontSize: 10,
+                                              color: Color(0xFF719EFA),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                            ],
                           ),
-                      ],
+                        ),
+                      ),
                     ),
                   ),
                 ),
@@ -252,6 +312,30 @@ class _ArchitectureCanvasState extends State<ArchitectureCanvas> {
       ],
     );
   }
+}
+
+/// Paint in viewport coordinates so panning never exposes a grid boundary.
+class ViewportGridPainter extends CustomPainter {
+  ViewportGridPainter(this.transform, this.color) : super(repaint: transform);
+  final TransformationController transform;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final matrix = transform.value;
+    final spacing = (18 * matrix.getMaxScaleOnAxis()).clamp(10.0, 54.0);
+    final offset = matrix.getTranslation();
+    final paint = Paint()..color = color;
+    for (double x = offset.x % spacing; x < size.width; x += spacing) {
+      for (double y = offset.y % spacing; y < size.height; y += spacing) {
+        canvas.drawCircle(Offset(x, y), .8, paint);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant ViewportGridPainter oldDelegate) =>
+      oldDelegate.transform != transform || oldDelegate.color != color;
 }
 
 /// Each edge uses its own curved lane, avoiding intermediate file cards.
@@ -267,19 +351,13 @@ class ImportConnectionsPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final dots = Paint()..color = const Color(0xFFDDE3D7);
-    for (double x = 12; x < size.width; x += 18) {
-      for (double y = 12; y < size.height; y += 18) {
-        canvas.drawCircle(Offset(x, y), .7, dots);
-      }
-    }
     for (var index = 0; index < connections.length; index++) {
       final edge = connections[index];
       final from = positions[edge.from]!.centerRight;
       final to = positions[edge.to]!.centerRight;
       final lane = from.dx + 60 + index * 84;
       final active = edge.from == selected || edge.to == selected;
-      final color = active ? const Color(0xFF346B50) : const Color(0xFF98A98E);
+      final color = active ? const Color(0xFF719EFA) : const Color(0xFF8193AF);
       final paint = Paint()
         ..color = color
         ..strokeWidth = active ? 2.5 : 1.5
