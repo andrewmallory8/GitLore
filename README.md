@@ -142,3 +142,15 @@ and raw error responses are not shown. Both local backend options use port 8087;
 run one at a time. Workers reads ignored `backend/worker/.dev.vars`; the Dart
 prototype reads ignored `backend/.env`. Hosted Workers uses Cloudflare secrets.
 Restart local servers after changing configuration.
+
+### Progress, recovery and presentation
+
+Analysis displays observed client stages, including selected file reads. Hosted
+AI shows a server-wait state rather than guessed server progress. Failures retain
+the previous result with a stale-result notice and recovery actions; available
+quota timing hints appear as a suggested local retry time.
+
+Choose **Present storybook** on a result for a focused sequential walkthrough,
+component highlighting and source citations. AI/static/demo labels and import-map
+limitations stay visible. Presentation uses the loaded result without another AI
+request; Back returns to the workspace.

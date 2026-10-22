@@ -8,7 +8,8 @@ import 'architecture_service.dart';
 import 'repository_analyzer.dart';
 
 class AnalysisException implements Exception {
-  const AnalysisException(this.message);
+  const AnalysisException(this.message, {this.retryAt});
+  final DateTime? retryAt;
   final String message;
   @override
   String toString() => message;
@@ -16,7 +17,8 @@ class AnalysisException implements Exception {
 
 /// Public GitHub access only. Never put a private GitHub or LLM key in this app.
 class GitHubArchitectureService implements ArchitectureService {
-  GitHubArchitectureService({this.client});
+  GitHubArchitectureService({this.client, this.onProgress});
+  final void Function(String)? onProgress;
   final http.Client? client;
   static const maxFiles = 8;
   static const maxFileBytes = 40000;
@@ -47,6 +49,7 @@ class GitHubArchitectureService implements ArchitectureService {
 
   Future<Architecture> _analyze(http.Client client, String repository) async {
     final base = '/repos/$repository';
+    onProgress?.call('Fetching repository information');
     final metadata = await _json(client, base);
     final canonical = metadata['full_name'] as String? ?? repository;
     final branch = metadata['default_branch'] as String?;
@@ -59,6 +62,7 @@ class GitHubArchitectureService implements ArchitectureService {
     );
     final sha = commit['sha'] as String;
     final treeSha = ((commit['commit'] as Map)['tree'] as Map)['sha'] as String;
+    onProgress?.call('Reading repository file list');
     final tree = await _json(
       client,
       '$base/git/trees/$treeSha',
@@ -92,6 +96,7 @@ class GitHubArchitectureService implements ArchitectureService {
     var totalBytes = 0;
     for (final entry in candidates.take(maxFiles)) {
       final path = entry['path'] as String;
+      onProgress?.call('Reading selected file: $path');
       if (totalBytes + (entry['size'] as num).toInt() > maxTotalBytes) {
         warnings.add('Skipped $path to stay within the content budget.');
         continue;
@@ -131,6 +136,7 @@ class GitHubArchitectureService implements ArchitectureService {
     warnings.add(
       'Read ${files.length} selected files out of ${blobs.length} tree entries. Files over 40 KB, generated files, and lockfiles are excluded.',
     );
+    onProgress?.call('Building the map and static walkthrough');
     return RepositoryAnalyzer.build(
       repository: canonical,
       description: metadata['description'] as String?,
@@ -171,8 +177,12 @@ class GitHubArchitectureService implements ArchitectureService {
       );
     }
     if (response.statusCode == 403 || response.statusCode == 429) {
-      throw const AnalysisException(
+      final reset = int.tryParse(response.headers['x-ratelimit-reset'] ?? '');
+      throw AnalysisException(
         'GitHub denied the request or its public API limit was reached. Wait before trying again.',
+        retryAt: reset == null
+            ? null
+            : DateTime.fromMillisecondsSinceEpoch(reset * 1000, isUtc: true),
       );
     }
     if (response.statusCode != 200) {

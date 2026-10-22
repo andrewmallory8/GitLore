@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'services/bookshelf_service.dart';
 import 'services/preferences_shelf_storage.dart';
 import 'services/server_architecture_service.dart';
+import 'widgets/storybook_presentation.dart';
 import 'widgets/bookshelf_panel.dart';
 
 import 'package:url_launcher/url_launcher.dart';
@@ -87,6 +88,17 @@ class _GitLoreHomeState extends State<GitLoreHome> {
 
   String? _error;
   bool _loading = false;
+  String _progress = '';
+  String? _failedUrl;
+  DateTime? _retryAt;
+
+  void _reportProgress(String stage) {
+    if (mounted && _loading) setState(() => _progress = stage);
+  }
+
+  ArchitectureService get _staticService => widget.allowServer
+      ? GitHubArchitectureService(onProgress: _reportProgress)
+      : widget.service;
   int _step = 0;
   int _page = 0;
   String _selected = 'client';
@@ -94,7 +106,7 @@ class _GitLoreHomeState extends State<GitLoreHome> {
   @override
   void initState() {
     super.initState();
-    _analyzer = CachedArchitectureService(widget.service);
+    _analyzer = CachedArchitectureService(_staticService);
     if (_serverUrl.isEmpty) {
       _serverUrl = !kIsWeb && defaultTargetPlatform == TargetPlatform.android
           ? 'http://10.0.2.2:8087'
@@ -107,7 +119,7 @@ class _GitLoreHomeState extends State<GitLoreHome> {
   void didUpdateWidget(covariant GitLoreHome oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.service != widget.service) {
-      _analyzer = CachedArchitectureService(widget.service);
+      _analyzer = CachedArchitectureService(_staticService);
     }
   }
 
@@ -117,15 +129,19 @@ class _GitLoreHomeState extends State<GitLoreHome> {
     super.dispose();
   }
 
-  Future<void> _analyze({bool refresh = false}) async {
+  Future<void> _analyze({bool refresh = false, String? retryUrl}) async {
     if (_loading) return;
-    final url = refresh && _architecture != null
-        ? 'https://github.com/${_architecture!.repository}'
-        : _url.text;
+    final url =
+        retryUrl ??
+        (refresh && _architecture != null
+            ? 'https://github.com/${_architecture!.repository}'
+            : _url.text);
     setState(() {
       _loading = true;
       _error = null;
-      _architecture = null;
+      _progress = 'Checking input and cached results';
+      _failedUrl = url;
+      _retryAt = null;
     });
     try {
       final result = await (refresh
@@ -142,7 +158,12 @@ class _GitLoreHomeState extends State<GitLoreHome> {
     } on FormatException catch (error) {
       if (mounted) setState(() => _error = error.message);
     } on AnalysisException catch (error) {
-      if (mounted) setState(() => _error = error.message);
+      if (mounted) {
+        setState(() {
+          _error = error.message;
+          _retryAt = error.retryAt;
+        });
+      }
     } catch (_) {
       if (mounted) {
         setState(() => _error = 'Something went wrong. Please try again.');
@@ -206,8 +227,12 @@ class _GitLoreHomeState extends State<GitLoreHome> {
       _useAi = enabled;
       _analyzer = CachedArchitectureService(
         enabled
-            ? ServerArchitectureService(_serverUrl, accessToken: _accessToken)
-            : widget.service,
+            ? ServerArchitectureService(
+                _serverUrl,
+                accessToken: _accessToken,
+                onProgress: _reportProgress,
+              )
+            : _staticService,
       );
     });
   }
@@ -375,12 +400,78 @@ class _GitLoreHomeState extends State<GitLoreHome> {
                         ),
                       ),
                     _input(),
-                    if (_error != null)
+                    if (_loading)
                       Padding(
-                        padding: const EdgeInsets.only(top: 10),
-                        child: Text(
-                          _error!,
-                          style: const TextStyle(color: Colors.red),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        child: Semantics(
+                          liveRegion: true,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const LinearProgressIndicator(),
+                              const SizedBox(height: 8),
+                              Text(_progress),
+                            ],
+                          ),
+                        ),
+                      ),
+                    if (_error != null)
+                      Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                _error!,
+                                style: const TextStyle(color: Colors.red),
+                              ),
+                              if (_architecture != null)
+                                const Text(
+                                  'Your previous result is still shown below; it has not been refreshed.',
+                                ),
+                              if (_retryAt != null)
+                                Text(
+                                  'Suggested retry time: ${_retryAt!.toLocal()}',
+                                ),
+                              Wrap(
+                                spacing: 8,
+                                children: [
+                                  TextButton(
+                                    onPressed: _loading
+                                        ? null
+                                        : () => _analyze(
+                                            refresh: true,
+                                            retryUrl: _failedUrl,
+                                          ),
+                                    child: const Text('Retry analysis'),
+                                  ),
+                                  if (_useAi)
+                                    TextButton(
+                                      onPressed: _loading
+                                          ? null
+                                          : () {
+                                              _setAi(false);
+                                              _analyze(
+                                                refresh: true,
+                                                retryUrl: _failedUrl,
+                                              );
+                                            },
+                                      child: const Text('Use static analysis'),
+                                    ),
+                                  if (_useAi)
+                                    TextButton(
+                                      onPressed: _loading
+                                          ? null
+                                          : _configureServer,
+                                      child: const Text(
+                                        'Check server settings',
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     const SizedBox(height: 12),
@@ -578,6 +669,24 @@ class _GitLoreHomeState extends State<GitLoreHome> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        Align(
+          alignment: Alignment.centerRight,
+          child: OutlinedButton.icon(
+            icon: const Icon(Icons.auto_stories_outlined),
+            label: const Text('Present storybook'),
+            onPressed: _loading
+                ? null
+                : () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => StorybookPresentation(
+                        architecture: architecture,
+                        onOpenSource: _openSource,
+                      ),
+                    ),
+                  ),
+          ),
+        ),
+
         if (aiFailed)
           Card(
             color: const Color(0xFFFFF0D5),

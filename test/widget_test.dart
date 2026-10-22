@@ -1,9 +1,18 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:gitlore/services/github_architecture_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:gitlore/main.dart';
 import 'package:gitlore/models/architecture.dart';
 import 'package:gitlore/services/architecture_service.dart';
+
+class _ControlledService implements ArchitectureService {
+  Completer<Architecture> pending = Completer<Architecture>();
+  @override
+  Future<Architecture> analyze(String url) => pending.future;
+}
 
 class _RecordingDemo extends DemoArchitectureService {
   final calls = <String>[];
@@ -43,6 +52,41 @@ class _AiOverviewService implements ArchitectureService {
 }
 
 void main() {
+  testWidgets('loading is visible and failed refresh retains prior result', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1440, 1300);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final service = _ControlledService();
+    final result = await tester.runAsync(
+      () => DemoArchitectureService().analyze('https://github.com/team/repo'),
+    );
+    await tester.pumpWidget(GitLoreApp(service: service));
+    await tester.tap(find.text('Analyze repository'));
+    await tester.pump();
+    expect(find.text('Checking input and cached results'), findsOneWidget);
+    service.pending.complete(result!);
+    await tester.pumpAndSettle();
+    service.pending = Completer<Architecture>();
+    await tester.ensureVisible(find.text('Refresh analysis'));
+    await tester.tap(find.text('Refresh analysis'));
+    await tester.pump();
+    service.pending.completeError(
+      const AnalysisException('Network unavailable'),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Network unavailable'), findsOneWidget);
+    expect(
+      find.textContaining('Your previous result is still shown'),
+      findsOneWidget,
+    );
+    expect(find.text('Retry analysis'), findsOneWidget);
+    expect(find.text('team/repo'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   setUp(() => SharedPreferences.setMockInitialValues({}));
   testWidgets('displays the server AI overview as the repository summary', (
     tester,

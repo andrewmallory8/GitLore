@@ -15,7 +15,9 @@ class ServerArchitectureService implements ArchitectureService {
     this.ai = true,
     this.accessToken = '',
     this.snapshotService,
+    this.onProgress,
   });
+  final void Function(String)? onProgress;
   final String baseUrl;
   final http.Client? client;
   final bool ai;
@@ -76,6 +78,11 @@ class ServerArchitectureService implements ArchitectureService {
               ],
             },
     );
+    onProgress?.call(
+      snapshot == null
+          ? 'Waiting for server analysis and AI explanation'
+          : 'Sending sampled source for server explanation',
+    );
     final response = await transport.send(request);
     final bytes = <int>[];
     await for (final chunk in response.stream.timeout(
@@ -89,13 +96,22 @@ class ServerArchitectureService implements ArchitectureService {
     final body = jsonDecode(utf8.decode(bytes));
     if (response.statusCode != 200) {
       if (ai && snapshot == null && body['error']['code'] == 'github_limit') {
-        final source = await (snapshotService ?? GitHubArchitectureService())
-            .analyze(url);
+        final source =
+            await (snapshotService ??
+                    GitHubArchitectureService(onProgress: onProgress))
+                .analyze(url);
         return _request(transport, url, snapshot: source);
       }
       final message = ArchitectureCodec.text(body['error']['message'], 3000);
-      throw AnalysisException(message);
+      final seconds = int.tryParse(response.headers['retry-after'] ?? '');
+      throw AnalysisException(
+        message,
+        retryAt: seconds == null
+            ? null
+            : DateTime.now().toUtc().add(Duration(seconds: seconds)),
+      );
     }
+    onProgress?.call('Validating the server result');
     return ArchitectureCodec.decode(body);
   }
 }

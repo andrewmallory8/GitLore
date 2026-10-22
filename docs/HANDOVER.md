@@ -1113,3 +1113,64 @@ are future work, not prerequisites for this MVP. Preserve keyless static mode.
    acceptance. Confirm the submission uses this branch's code; no merge has
    been authorized. Investigate a fresh failure by its specific quota/provider
    notice rather than reverting to the older Gemini model or removing safeguards.
+
+## Progress, recovery and storybook demo — 2026-10-22
+
+Working branch: codex/progress-recovery-storybook, from codex/cloudflare-worker
+17d08b2. User authorized these three objectives but forbids commits/pushes until
+their demo. Never move or edit any Trello cards. No Worker deployment required or
+performed; hosted behavior and team quotas remain unchanged.
+
+- Added optional progress callbacks to shared GitHub/server services. Direct
+  analysis reports metadata, tree, actual selected file reads, and map building.
+  Hosted mode reports server waiting, snapshot upload and result validation; no
+  simulated remote phases or percentages. Flutter announces progress accessibly.
+- Recovery preserves the prior result during work and on failure, explicitly
+  labels it as not refreshed, retries the failed URL bypassing client cache, and
+  offers direct static analysis/server settings in AI mode. GitHub reset headers
+  and numeric Retry-After hints populate a local suggested retry time when visible.
+  Unknown reset times are not invented. Hosted browser CORS currently does not
+  expose Retry-After, so that header is only available to native/CLI clients unless
+  a future authorized Worker change exposes it. API messages remain visible.
+- Added separate StorybookPresentation widget with sequential panels, navigation,
+  progress, selected-component highlight/map, source links and AI/static/demo
+  distinctions. It uses existing chapters; no new Gemini calls or generated art.
+- Added fixtures for crawler progress, server retry hints, presentation at narrow
+  and wide widths, and failed-refresh preservation.
+
+Validation: locked backend restore passed; whole-project Flutter analysis passed;
+17 backend tests passed; release web/Wasm build and git diff whitespace check
+passed. Native Flutter tests still crash in macos_x64 CPU detection on this machine
+and could not verify the new widget fixtures. No claim of full CI/mobile acceptance.
+Manual in-app browser: real Express static analysis showed fetching/file progress;
+presentation opened and moved to panel 2 with matching component; invalid URL
+showed error/retry while retaining Express; corrected URL reopened cached result.
+Demo at http://127.0.0.1:8086/?demo=storybook. User still needs to demo AI mode and
+mobile behavior. No credentials, commits, pushes, Trello edits or merges.
+
+### User demo acceptance and local checkpoint — 2026-10-22
+
+The user demoed this build and reported that everything seems to be working
+great, then explicitly authorized updating the handover and committing the
+changes on the current development branch, codex/progress-recovery-storybook.
+This supersedes the earlier pending user-demo/commit restriction for this batch.
+Preserve all preceding progress. This authorization is for a local commit only;
+no push, merge, deployment, or Trello edits are authorized. Never edit/move Trello
+cards in this project.
+
+Delivered scope: observed analysis progress, recovery actions with preserved
+previous results and available retry timing, and the separate storybook
+presentation mode. The user feedback is a manual demo acceptance, not evidence
+of every AI failure path or Android verification. The validation results and
+Flutter engine/CORS limitations recorded above remain applicable.
+
+Suggested next objectives, pending implementation authorization:
+1. Curated Explore gallery with repository descriptions and technology tags;
+   explicitly identify demo/cached content and when a selection starts analysis.
+2. Search and technology filters for Explore and saved projects, with result
+   counts and helpful empty states.
+3. Bookshelf polish: confirmation for individual deletion and browser/Android
+   save/open/delete/restart acceptance.
+Before merging, run the new widget fixtures in a working Flutter environment
+and complete native acceptance. Keep secrets in ignored local files or the
+Cloudflare secret store; no credentials belong in the commit.

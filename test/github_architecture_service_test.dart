@@ -90,6 +90,21 @@ class _ResolvedService implements ArchitectureService {
 }
 
 void main() {
+  test('reports actual crawler stages and file work in order', () async {
+    final stages = <String>[];
+    await GitHubArchitectureService(
+      client: repositoryClient(),
+      onProgress: stages.add,
+    ).analyze('https://github.com/team/orchard');
+    expect(stages.first, 'Fetching repository information');
+    expect(stages[1], 'Reading repository file list');
+    expect(
+      stages.where((s) => s.startsWith('Reading selected file:')),
+      hasLength(4),
+    );
+    expect(stages.last, 'Building the map and static walkthrough');
+  });
+
   testWidgets('live results show evidence and navigate on a narrow screen', (
     tester,
   ) async {

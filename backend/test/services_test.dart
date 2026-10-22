@@ -81,6 +81,38 @@ http.Response aiResponse(Map<String, dynamic> c) => http.Response(
 );
 
 void main() {
+  test(
+    'server progress is observable and quota retry hint is retained',
+    () async {
+      final stages = <String>[];
+      final before = DateTime.now().toUtc();
+      final service = ServerArchitectureService(
+        'https://example.test',
+        onProgress: stages.add,
+        client: MockClient(
+          (_) async => http.Response(
+            jsonEncode({
+              'error': {'code': 'team_limit', 'message': 'Team quota reached'},
+            }),
+            429,
+            headers: {'retry-after': '60'},
+          ),
+        ),
+      );
+      try {
+        await service.analyze('https://github.com/team/repo');
+        fail('Expected quota error');
+      } on AnalysisException catch (e) {
+        expect(e.message, 'Team quota reached');
+        expect(
+          e.retryAt!.difference(before).inSeconds,
+          inInclusiveRange(59, 62),
+        );
+      }
+      expect(stages, ['Waiting for server analysis and AI explanation']);
+    },
+  );
+
   test('server GitHub quota falls back once to a bounded client snapshot with server-only AI', () async {
     final crawler = SnapshotFixtureService();
     final routes = <String>[];
