@@ -142,8 +142,9 @@ void main() {
     await tester.ensureVisible(find.text('Fit to view'));
     await tester.tap(find.text('Fit to view'));
     await tester.pumpAndSettle();
-    for (final label in ['src/index.js', 'src/service.js']) {
+    for (final label in ['index.js', 'service.js']) {
       final component = find.widgetWithText(OutlinedButton, label);
+      expect(component, findsOneWidget);
       await tester.ensureVisible(component);
       await tester.tap(component);
       await tester.pumpAndSettle();
