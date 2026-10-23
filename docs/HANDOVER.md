@@ -1320,3 +1320,24 @@ acceptance does not imply every export destination/platform has been tested.
 Next: verify development-branch CI, especially widget tests, before user merges;
 exercise exported Mermaid/Markdown in the team's chosen documentation tools.
 No Trello cards changed. No Worker deployment or main merge is included.
+
+### CI widget assertion follow-up — 2026-10-22
+
+CI run 39853607303 on e38edde reported 39 passing / 3 failing Flutter tests.
+Signed-in workflow logs show both storybook widths fail at the Panel 2 counter
+assertion: ensureVisible scrolls navigation to the top, and the lazy ListView no
+longer builds the offscreen counter. Tests now return to the header before counter
+assertions and explicitly reveal Previous navigation. Citation and selected graph
+component assertions are retained. The narrow live-result test still expected all
+imports after README selection; updated to assert an empty scoped connection state,
+then verify incoming/outgoing edges by selecting both connected source nodes after
+Fit to view. No production behavior changed in this follow-up.
+
+Format, analyzer and diff checks pass. Native targeted test retry still crashes
+in local CPU detection; Chrome-platform retry cannot launch its test browser.
+These fixes need a CI rerun; do not claim the three tests have passed yet.
+Follow-up is local/uncommitted; no push or merge performed.
+
+User authorized committing and pushing the CI test follow-up to the development
+branch. User will watch the workflow and handle the main merge. The local test
+execution limitations above remain; CI confirmation is pending the new push.

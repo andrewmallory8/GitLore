@@ -48,6 +48,13 @@ void main() {
       await tester.ensureVisible(find.text('Next panel'));
       await tester.tap(find.text('Next panel'));
       await tester.pumpAndSettle();
+      // ensureVisible aligns navigation at the top; the lazy ListView can
+      // dispose the panel counter above it. Return to the header to assert it.
+      tester
+          .state<ScrollableState>(find.byType(Scrollable).first)
+          .position
+          .jumpTo(0);
+      await tester.pumpAndSettle();
       expect(find.text('Panel 2 of 2'), findsOneWidget);
       expect(
         tester
@@ -55,7 +62,13 @@ void main() {
             .selected,
         'b',
       );
+      await tester.ensureVisible(find.text('Previous panel'));
       await tester.tap(find.text('Previous panel'));
+      await tester.pumpAndSettle();
+      tester
+          .state<ScrollableState>(find.byType(Scrollable).first)
+          .position
+          .jumpTo(0);
       await tester.pumpAndSettle();
       expect(find.text('Panel 1 of 2'), findsOneWidget);
       expect(tester.takeException(), isNull);

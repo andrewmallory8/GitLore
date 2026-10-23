@@ -134,7 +134,22 @@ void main() {
     await tester.tap(find.widgetWithText(OutlinedButton, 'README.md'));
     await tester.pumpAndSettle();
     expect(find.textContaining('1  # Orchard'), findsOneWidget);
-    expect(find.text('Observed relative imports'), findsOneWidget);
+    expect(find.text('Observed relative imports'), findsNothing);
+    expect(
+      find.textContaining('No incoming or outgoing imports resolved'),
+      findsOneWidget,
+    );
+    await tester.ensureVisible(find.text('Fit to view'));
+    await tester.tap(find.text('Fit to view'));
+    await tester.pumpAndSettle();
+    for (final label in ['src/index.js', 'src/service.js']) {
+      final component = find.widgetWithText(OutlinedButton, label);
+      await tester.ensureVisible(component);
+      await tester.tap(component);
+      await tester.pumpAndSettle();
+      expect(find.text('Observed relative imports'), findsOneWidget);
+      expect(find.text('src/index.js → src/service.js'), findsOneWidget);
+    }
     await tester.ensureVisible(find.text('Next chapter →'));
     await tester.tap(find.text('Next chapter →'));
     await tester.pumpAndSettle();
