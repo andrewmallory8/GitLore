@@ -90,6 +90,21 @@ class _ResolvedService implements ArchitectureService {
 }
 
 void main() {
+  test('reports actual crawler stages and file work in order', () async {
+    final stages = <String>[];
+    await GitHubArchitectureService(
+      client: repositoryClient(),
+      onProgress: stages.add,
+    ).analyze('https://github.com/team/orchard');
+    expect(stages.first, 'Fetching repository information');
+    expect(stages[1], 'Reading repository file list');
+    expect(
+      stages.where((s) => s.startsWith('Reading selected file:')),
+      hasLength(4),
+    );
+    expect(stages.last, 'Building the map and static walkthrough');
+  });
+
   testWidgets('live results show evidence and navigate on a narrow screen', (
     tester,
   ) async {
@@ -119,7 +134,23 @@ void main() {
     await tester.tap(find.widgetWithText(OutlinedButton, 'README.md'));
     await tester.pumpAndSettle();
     expect(find.textContaining('1  # Orchard'), findsOneWidget);
-    expect(find.text('Observed relative imports'), findsOneWidget);
+    expect(find.text('Observed relative imports'), findsNothing);
+    expect(
+      find.textContaining('No incoming or outgoing imports resolved'),
+      findsOneWidget,
+    );
+    await tester.ensureVisible(find.text('Fit to view'));
+    await tester.tap(find.text('Fit to view'));
+    await tester.pumpAndSettle();
+    for (final label in ['index.js', 'service.js']) {
+      final component = find.widgetWithText(OutlinedButton, label);
+      expect(component, findsOneWidget);
+      await tester.ensureVisible(component);
+      await tester.tap(component);
+      await tester.pumpAndSettle();
+      expect(find.text('Observed relative imports'), findsOneWidget);
+      expect(find.text('src/index.js → src/service.js'), findsOneWidget);
+    }
     await tester.ensureVisible(find.text('Next chapter →'));
     await tester.tap(find.text('Next chapter →'));
     await tester.pumpAndSettle();

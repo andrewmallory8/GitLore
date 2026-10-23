@@ -1,0 +1,30 @@
+{
+  "name": "gitlore-worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --port 8087",
+    "check": "tsc --noEmit",
+    "format": "prettier --write src test *.ts *.json *.jsonc",
+    "format:check": "prettier --check src test *.ts *.json *.jsonc",
+    "test": "vitest run",
+    "test:runtime": "vitest run --config vitest.runtime.config.ts",
+    "build": "wrangler deploy --dry-run --outdir dist",
+    "deploy": "wrangler deploy"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-plugin": "^1.4.6",
+    "@cloudflare/workers-types": "^5.20261021.1",
+    "@types/node": "^26.6.5",
+    "ajv": "^8.20.0",
+    "ajv-formats": "^3.0.1",
+    "prettier": "^3.9.10",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.0",
+    "wrangler": "^4.151.3"
+  }
+}

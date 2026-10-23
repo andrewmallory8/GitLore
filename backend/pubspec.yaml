@@ -1,0 +1,12 @@
+name: gitlore_backend
+publish_to: none
+environment:
+  sdk: ^3.13.2
+dependencies:
+  gitlore_core:
+    path: ../packages/gitlore_core
+  http: ^1.6.0
+  path: ^1.9.1
+dev_dependencies:
+  test: ^1.26.0
+  lints: ^6.0.0

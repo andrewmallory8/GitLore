@@ -1,0 +1,4 @@
+# Local example only. Copy to .dev.vars and replace the team token.
+# Never put the Gemini key in Flutter, wrangler.jsonc, or GitHub commits.
+TEAM_ACCESS_TOKEN=replace-with-a-random-token-of-at-least-32-characters
+GEMINI_API_KEY=

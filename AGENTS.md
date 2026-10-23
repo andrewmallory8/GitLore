@@ -11,6 +11,11 @@ Check the working tree and recent commits first; preserve other contributors' wo
 - Put data types in `lib/models/`, fetching/analysis/storage in `lib/services/`,
   and reusable UI in `lib/widgets/`. Keep network and business logic out of widgets.
   Extract new screens from `lib/main.dart` as the UI grows.
+- Shared non-Flutter models and services live in `packages/gitlore_core/lib/`
+  under the same `models/` and `services/` folders. The matching `lib/` files are
+  compatibility exports; edit the shared implementation, not the export files.
+  Workers code lives in `backend/worker/`; keep its schema and parity fixtures
+  synchronized with the shared Dart contract.
 - Keep `ArchitectureService` injectable. New services need deterministic fixture
   tests; tests must not depend on live GitHub, LLM credentials, or paid accounts.
 - Preserve source evidence and uncertainty. Import edges are not runtime data
